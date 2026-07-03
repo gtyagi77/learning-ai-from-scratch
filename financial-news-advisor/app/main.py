@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from . import config, crawler, database, recommender, tickers, universe
+from . import config, crawler, database, prices, recommender, tickers, universe
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -64,6 +64,8 @@ def status():
         "crawler": crawler.get_status(),
         "articles_stored": database.article_count(),
         "universe_size": len(universe.WATCHLIST),
+        "news_provider": config.TICKER_NEWS_PROVIDER,
+        "quote_provider": prices.active_provider(),
         "crawl_interval_s": config.CRAWL_INTERVAL_SECONDS,
         "lookback_hours": config.LOOKBACK_HOURS,
         "server_time": time.time(),

@@ -57,12 +57,38 @@ NEWS_FEEDS = [
     ("MarketWatch Top", "https://feeds.content.dowjones.io/public/rss/mw_topstories"),
 ]
 
-# Per-ticker feed template; one of these is polled for every portfolio ticker
-# so holdings always have coverage even when they miss the general feeds.
-# Works for NSE/BSE symbols (RELIANCE.NS, 500325.BO) and US symbols alike.
-TICKER_FEED_TEMPLATE = (
+# Per-holding news provider. Each portfolio holding gets its own feed so it
+# always has coverage even when it misses the general feeds.
+#   "google" (default) — Google News RSS search by company name; far deeper
+#                        Indian coverage than Yahoo's per-ticker feed, still
+#                        keyless. Queried by name, falling back to symbol.
+#   "yahoo"            — Yahoo Finance per-ticker headline feed (by symbol).
+#   "none"            — rely only on the general + sector feeds above.
+TICKER_NEWS_PROVIDER = os.environ.get("TICKER_NEWS_PROVIDER", "google").lower()
+
+# Google News RSS search. {query} is URL-encoded at call time; hl/gl/ceid
+# pin results to the India/English edition.
+GOOGLE_NEWS_TEMPLATE = (
+    "https://news.google.com/rss/search?q={query}&hl=en-IN&gl=IN&ceid=IN:en"
+)
+
+# Yahoo per-ticker feed (used when TICKER_NEWS_PROVIDER == "yahoo").
+YAHOO_TICKER_FEED_TEMPLATE = (
     "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=IN&lang=en-IN"
 )
+
+# Quote provider for live prices (used to derive target prices).
+#   "yahoo" (default) — Yahoo Finance chart endpoint; keyless, covers
+#                       NSE/BSE/US in one API, delayed ~15 min, unofficial.
+#   "upstox"          — Upstox market-quote API (free, real-time NSE/BSE);
+#                       needs UPSTOX_ACCESS_TOKEN.
+#   "angelone"        — Angel One SmartAPI (free, real-time); needs
+#                       ANGELONE_API_KEY / ANGELONE_ACCESS_TOKEN.
+# Providers that need credentials fall back to Yahoo when unconfigured.
+QUOTE_PROVIDER = os.environ.get("QUOTE_PROVIDER", "yahoo").lower()
+UPSTOX_ACCESS_TOKEN = os.environ.get("UPSTOX_ACCESS_TOKEN", "")
+ANGELONE_API_KEY = os.environ.get("ANGELONE_API_KEY", "")
+ANGELONE_ACCESS_TOKEN = os.environ.get("ANGELONE_ACCESS_TOKEN", "")
 
 # Tickers seeded into the portfolio on first run so the dashboard has
 # something to show; the user can remove them freely. NSE symbols use the

@@ -45,7 +45,9 @@ def test_full_pipeline(monkeypatch):
     feed_url = f"http://127.0.0.1:{server.server_port}/feed.xml"
 
     monkeypatch.setattr(config, "NEWS_FEEDS", [("LocalWire", feed_url)])
-    monkeypatch.setattr(config, "TICKER_FEED_TEMPLATE", feed_url + "?s={ticker}")
+    # Per-holding feeds go through a real provider (Google/Yahoo); disable
+    # them here so the pipeline is exercised against only the local wire.
+    monkeypatch.setattr(config, "TICKER_NEWS_PROVIDER", "none")
     monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
     monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
 

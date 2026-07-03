@@ -78,6 +78,32 @@ def test_parse_garbage_returns_empty():
     assert rss.parse_feed("not xml at all") == []
 
 
+GOOGLE_NEWS_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<title>"Reliance Industries" stock - Google News</title>
+<item>
+<title>Reliance Industries hits record high after strong Q3 results - Economic Times</title>
+<link>https://news.google.com/rss/articles/CBMiabc123?oc=5</link>
+<guid isPermaLink="false">CBMiabc123</guid>
+<pubDate>Fri, 03 Jul 2026 06:30:00 GMT</pubDate>
+<description>&lt;a href="https://news.google.com/x"&gt;Reliance Industries hits record high&lt;/a&gt;&nbsp;&lt;font&gt;Economic Times&lt;/font&gt;</description>
+<source url="https://economictimes.indiatimes.com">Economic Times</source>
+</item>
+</channel></rss>"""
+
+
+def test_parse_google_news_rss():
+    # Sample contains a bare &nbsp; (a non-XML entity Google News emits);
+    # the parser must recover from it rather than dropping the whole feed.
+    items = rss.parse_feed(GOOGLE_NEWS_SAMPLE)
+    assert len(items) == 1
+    assert items[0].title == "Reliance Industries hits record high after strong Q3 results - Economic Times"
+    assert items[0].link.startswith("https://news.google.com/rss/articles/")
+    assert items[0].published.year == 2026
+    # The publisher suffix doesn't stop the headline from scoring bullish.
+    assert sentiment.score_article(items[0].title, items[0].summary) > 0.2
+
+
 # ---------- tickers ----------
 
 def test_extract_by_company_name():
@@ -180,6 +206,67 @@ def test_no_news_means_hold():
     rec = recommender.recommend_for_ticker("ZZZQ")
     assert rec["action"] == "HOLD"
     assert rec["confidence"] == 0.0
+
+
+def test_google_news_feed_query(monkeypatch):
+    from app import config, crawler
+
+    monkeypatch.setattr(config, "TICKER_NEWS_PROVIDER", "google")
+    url = crawler._holding_feed("RELIANCE.NS", "Reliance Industries")
+    assert url.startswith("https://news.google.com/rss/search?q=")
+    # Company name is used (not the .NS symbol Google can't parse), quoted
+    # and scoped to the equity story.
+    assert "Reliance+Industries" in url and "stock" in url
+    assert "gl=IN" in url
+
+
+def test_holding_feed_provider_switch(monkeypatch):
+    from app import config, crawler
+
+    monkeypatch.setattr(config, "TICKER_NEWS_PROVIDER", "yahoo")
+    assert "finance.yahoo.com" in crawler._holding_feed("TCS.NS", "TCS")
+    monkeypatch.setattr(config, "TICKER_NEWS_PROVIDER", "none")
+    assert crawler._holding_feed("TCS.NS", "TCS") is None
+    # Falls back to the bare symbol when no company name is known.
+    monkeypatch.setattr(config, "TICKER_NEWS_PROVIDER", "google")
+    assert "TCS" in crawler._holding_feed("TCS.NS", None)
+
+
+def test_quote_provider_selection_and_fallback(monkeypatch):
+    from app import config, prices
+
+    # Broker selected but unconfigured -> effective provider is Yahoo.
+    monkeypatch.setattr(config, "QUOTE_PROVIDER", "upstox")
+    monkeypatch.setattr(config, "UPSTOX_ACCESS_TOKEN", "")
+    assert prices.active_provider() == "yahoo"
+
+    # Broker configured -> it is active, but a per-symbol miss still falls
+    # back to Yahoo so quotes keep resolving.
+    monkeypatch.setattr(config, "UPSTOX_ACCESS_TOKEN", "tok")
+    monkeypatch.setattr(prices, "_load_instrument_map", lambda: {})  # no keys
+    assert prices.active_provider() == "upstox"
+    sentinel = {"price": 100.0, "previous_close": 98.0, "currency": "INR", "change_pct": 2.04}
+    monkeypatch.setattr(prices, "_yahoo_quote", lambda s: sentinel)
+    prices._cache.clear()
+    assert prices.get_quote("RELIANCE.NS") == sentinel
+
+
+def test_quote_shape_and_change_pct(monkeypatch):
+    from app import config, prices
+
+    monkeypatch.setattr(config, "QUOTE_PROVIDER", "yahoo")
+
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"chart": {"result": [{"meta": {
+                "regularMarketPrice": 110.0, "chartPreviousClose": 100.0,
+                "currency": "INR"}}]}}
+
+    monkeypatch.setattr(prices.requests, "get", lambda *a, **k: _Resp())
+    prices._cache.clear()
+    q = prices.get_quote("RELIANCE.NS")
+    assert q == {"price": 110.0, "previous_close": 100.0, "currency": "INR", "change_pct": 10.0}
 
 
 def test_universe_is_well_formed():

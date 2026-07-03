@@ -182,9 +182,10 @@
     symbols are resolved automatically. US tickers (AAPL) are supported for
     holdings via the RBI's Liberalised Remittance Scheme.<br>
     Sources: public RSS feeds (Economic Times, Moneycontrol, LiveMint, Business
-    Standard, BusinessLine, Financial Express, NDTV Profit, Yahoo Finance, CNBC,
-    MarketWatch). Sentiment: from-scratch financial lexicon. Quotes: Yahoo
-    Finance (delayed). Auto-refreshes every 60&nbsp;seconds.
+    Standard, BusinessLine, Financial Express, NDTV Profit, CNBC, MarketWatch)
+    plus Google News per holding. Sentiment: from-scratch financial lexicon.
+    Quotes: pluggable provider (Yahoo Finance by default; Upstox / Angel One
+    for real-time NSE). Auto-refreshes every 60&nbsp;seconds.
   </footer>
 </div>
 
@@ -330,6 +331,7 @@ async function loadStatus() {
   const c = s.crawler || {};
   $("status-line").textContent =
     `${s.articles_stored} articles stored · watching ${s.universe_size ?? "—"} stocks` +
+    ` · news: ${s.news_provider ?? "—"} · quotes: ${s.quote_provider ?? "—"}` +
     ` · last crawl ${c.last_run ? timeAgo(c.last_run) : "pending"}` +
     ` · ${c.feeds_ok ?? 0} feeds ok` + (c.feeds_failed ? `, ${c.feeds_failed} failed` : "");
 }

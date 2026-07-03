@@ -8,6 +8,7 @@ directly with xml.etree.
 import html
 import re
 import xml.etree.ElementTree as ET
+from html.entities import name2codepoint
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -17,6 +18,21 @@ ATOM_NS = "{http://www.w3.org/2005/Atom}"
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
+# Named HTML entities that are not predefined in XML (only &amp; &lt; &gt;
+# &quot; &apos; are). Some feeds emit e.g. a bare &nbsp; outside CDATA, which
+# would otherwise make the whole feed unparseable.
+_NAMED_ENTITY_RE = re.compile(r"&([a-zA-Z][a-zA-Z0-9]+);")
+_XML_ENTITIES = {"amp", "lt", "gt", "quot", "apos"}
+
+
+def _neutralise_bad_entities(xml: str) -> str:
+    def repl(match: "re.Match") -> str:
+        name = match.group(1)
+        if name in _XML_ENTITIES:
+            return match.group(0)
+        cp = name2codepoint.get(name)
+        return f"&#{cp};" if cp is not None else "&amp;" + name + ";"
+    return _NAMED_ENTITY_RE.sub(repl, xml)
 
 
 @dataclass
@@ -107,10 +123,16 @@ def _parse_atom(root: ET.Element) -> List[FeedItem]:
 
 def parse_feed(raw_xml: str) -> List[FeedItem]:
     """Parse RSS or Atom XML into feed items. Returns [] on malformed input."""
+    raw_xml = raw_xml.strip()
     try:
-        root = ET.fromstring(raw_xml.strip())
+        root = ET.fromstring(raw_xml)
     except ET.ParseError:
-        return []
+        # Retry once with non-XML named entities (e.g. a stray &nbsp;)
+        # converted to numeric form, which some feeds emit outside CDATA.
+        try:
+            root = ET.fromstring(_neutralise_bad_entities(raw_xml))
+        except ET.ParseError:
+            return []
     if root.tag == f"{ATOM_NS}feed":
         return _parse_atom(root)
     return _parse_rss(root)

@@ -3,7 +3,8 @@
 import logging
 import threading
 import time
-from typing import Dict, List, Tuple
+import urllib.parse
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -39,13 +40,29 @@ def _fetch(url: str) -> str:
     return resp.text
 
 
+def _holding_feed(symbol: str, name: Optional[str]) -> Optional[str]:
+    """Build the per-holding news feed URL for the configured provider."""
+    provider = config.TICKER_NEWS_PROVIDER
+    if provider == "none":
+        return None
+    if provider == "yahoo":
+        return config.YAHOO_TICKER_FEED_TEMPLATE.format(ticker=symbol)
+    # Default: Google News search. Query by company name when known (Google
+    # doesn't understand ".NS" symbols), scoped with "stock" to stay on the
+    # equity story and off unrelated same-name news.
+    base = name or symbol.split(".")[0]
+    query = urllib.parse.quote_plus(f'"{base}" stock')
+    return config.GOOGLE_NEWS_TEMPLATE.format(query=query)
+
+
 def _feed_list() -> List[Tuple[str, str]]:
+    # source label is prefixed "Holding:{symbol}" so crawl_once can attribute
+    # every article from a per-holding feed to that symbol.
     feeds = list(config.NEWS_FEEDS)
     for holding in database.get_portfolio():
-        symbol = holding["ticker"]
-        feeds.append(
-            (f"Yahoo:{symbol}", config.TICKER_FEED_TEMPLATE.format(ticker=symbol))
-        )
+        url = _holding_feed(holding["ticker"], holding.get("name"))
+        if url:
+            feeds.append((f"Holding:{holding['ticker']}", url))
     return feeds
 
 
@@ -80,8 +97,8 @@ def crawl_once() -> int:
             text = f"{item.title}. {item.summary}"
             score = sentiment.score_article(item.title, item.summary)
             mentioned = tickers.extract_tickers(text, symbols, extra_names)
-            # Per-ticker feeds are implicitly about that ticker.
-            if source.startswith("Yahoo:"):
+            # Per-holding feeds are implicitly about that holding.
+            if source.startswith("Holding:"):
                 symbol = source.split(":", 1)[1]
                 if symbol not in mentioned:
                     mentioned.append(symbol)

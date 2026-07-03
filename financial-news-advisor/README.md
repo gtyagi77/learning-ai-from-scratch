@@ -7,9 +7,28 @@ price** for every holding.
 
 Focused on **Indian markets**: NSE/BSE stocks quoted in ₹, Indian financial
 news sources (Economic Times, Moneycontrol, LiveMint, Business Standard,
-BusinessLine, Financial Express, NDTV Profit), plus US stocks — which Indian
-retail investors can hold through the RBI's Liberalised Remittance Scheme
-(LRS) — covered via Yahoo Finance, CNBC and MarketWatch feeds.
+BusinessLine, Financial Express, NDTV Profit) plus Google News per holding,
+and US stocks — which Indian retail investors can hold through the RBI's
+Liberalised Remittance Scheme (LRS) — covered via CNBC and MarketWatch.
+
+### Data sources are pluggable
+
+Both external dependencies are swappable via environment variables, so you
+can trade the zero-config defaults for higher-quality official data:
+
+| | env var | options |
+|---|---|---|
+| **Per-holding news** | `TICKER_NEWS_PROVIDER` | `google` (default — Google News RSS by company name, deep Indian coverage, keyless), `yahoo` (per-ticker feed), `none` |
+| **Live quotes** | `QUOTE_PROVIDER` | `yahoo` (default — keyless, NSE/BSE/US in one API, ~15 min delayed), `upstox` (free, real-time NSE/BSE), `angelone` (free, real-time) |
+
+Yahoo is the default only because it is the one keyless API spanning
+NSE+BSE+US; it is unofficial and increasingly rate-limited. A broker provider
+(**Upstox** / **Angel One** — both free with an account) gives official,
+real-time NSE data: set `QUOTE_PROVIDER`, supply the access token
+(`UPSTOX_ACCESS_TOKEN`, or `ANGELONE_API_KEY` + `ANGELONE_ACCESS_TOKEN`), and
+point `INSTRUMENT_MAP_PATH` at a JSON `{ "RELIANCE.NS": "<instrument-key>" }`
+map. Any symbol a broker can't price (e.g. US holdings) falls back to Yahoo
+automatically, so the app always keeps working.
 
 > ⚠ **Educational project only.** The recommendations are derived from a
 > hand-rolled sentiment model over public news headlines. They are not
@@ -28,10 +47,11 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
                           Yahoo quote API (current price)
 ```
 
-1. **Crawler** (`app/crawler.py`) polls ~14 market RSS feeds (11 Indian,
-   3 US/global) plus one Yahoo Finance per-ticker feed for every portfolio
-   holding, every 2 minutes. The RSS/Atom parser (`app/rss.py`) is written
-   from scratch on the standard library.
+1. **Crawler** (`app/crawler.py`) polls ~17 market RSS feeds (14 Indian
+   incl. ET Tech/Energy/Defence, 3 US/global) plus a per-holding news feed
+   (Google News by default) for every portfolio holding, every 2 minutes.
+   The RSS/Atom parser (`app/rss.py`) is written from scratch on the standard
+   library and tolerates the stray non-XML entities some feeds emit.
 2. **Sentiment** (`app/sentiment.py`) is a dependency-free, Loughran-McDonald
    style financial lexicon with negation handling, intensifiers, and
    India-market vocabulary (FII outflows, NPAs, IPO subscription). Each
@@ -86,8 +106,8 @@ grouping. Data persists in `advisor.db`.
 | `GET /api/status` | Crawler health/stats |
 
 Configuration is via environment variables (see `app/config.py`):
-`CRAWL_INTERVAL_SECONDS`, `LOOKBACK_HOURS`, `RECENCY_HALF_LIFE_HOURS`,
-`MAX_IMPLIED_MOVE`, `DB_PATH`.
+`TICKER_NEWS_PROVIDER`, `QUOTE_PROVIDER` (+ broker creds), `CRAWL_INTERVAL_SECONDS`,
+`LOOKBACK_HOURS`, `RECENCY_HALF_LIFE_HOURS`, `MAX_IMPLIED_MOVE`, `DB_PATH`.
 
 ## Tests
 
