@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+advisor.db
+.pytest_cache/
+instruments.json
