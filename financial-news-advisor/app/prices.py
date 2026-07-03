@@ -17,9 +17,7 @@ Quotes are best-effort: when nothing resolves, the advisor still produces
 recommendations, just without price targets.
 """
 
-import json
 import logging
-import os
 import threading
 import time
 from typing import Callable, Dict, Optional
@@ -117,10 +115,11 @@ def _yahoo_quote(symbol: str) -> Optional[Quote]:
 # --------------------------------------------------------------------------
 # instrument-key / symbol-token maps for broker providers
 # --------------------------------------------------------------------------
-# Broker APIs address instruments by their own identifiers, not "RELIANCE.NS".
-# Supply a JSON map at INSTRUMENT_MAP_PATH: { "RELIANCE.NS": "<key>", ... }.
-# For Upstox the value is an instrument_key like "NSE_EQ|INE002A01018";
-# for Angel One it is the SmartAPI symboltoken like "2885".
+# Broker APIs address instruments by their own identifiers, not "RELIANCE.NS"
+# (Upstox: instrument_key like "NSE_EQ|INE002A01018"; Angel One: a numeric
+# symboltoken). app/instruments.py resolves the map from INSTRUMENT_MAP_PATH,
+# a local instruments.json, or an automatic download of the broker's public
+# list — see that module. Loaded lazily, once per process.
 
 _instrument_map: Optional[Dict[str, str]] = None
 
@@ -128,16 +127,8 @@ _instrument_map: Optional[Dict[str, str]] = None
 def _load_instrument_map() -> Dict[str, str]:
     global _instrument_map
     if _instrument_map is None:
-        path = os.environ.get("INSTRUMENT_MAP_PATH", "")
-        if path and os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    _instrument_map = {k.upper(): v for k, v in json.load(fh).items()}
-            except Exception as exc:
-                log.warning("could not load instrument map %s: %s", path, exc)
-                _instrument_map = {}
-        else:
-            _instrument_map = {}
+        from . import instruments
+        _instrument_map = instruments.load_map(config.QUOTE_PROVIDER)
     return _instrument_map
 
 

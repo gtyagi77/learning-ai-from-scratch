@@ -324,6 +324,51 @@ def test_implied_move_without_quote(monkeypatch):
     assert "+0." in rec["rationale"]  # the signal value is shown
 
 
+def test_instrument_map_builders():
+    from app import instruments
+
+    upstox_dump = [
+        {"segment": "NSE_EQ", "trading_symbol": "RELIANCE",
+         "instrument_key": "NSE_EQ|INE002A01018"},
+        {"segment": "NSE_FO", "trading_symbol": "RELIANCE24JULFUT",
+         "instrument_key": "NSE_FO|12345"},          # derivatives skipped
+        {"segment": "NSE_EQ", "tradingsymbol": "TCS",  # legacy key spelling
+         "instrument_key": "NSE_EQ|INE467B01029"},
+    ]
+    m = instruments.build_upstox_map(upstox_dump)
+    assert m == {"RELIANCE.NS": "NSE_EQ|INE002A01018", "TCS.NS": "NSE_EQ|INE467B01029"}
+
+    angel_dump = [
+        {"exch_seg": "NSE", "symbol": "RELIANCE-EQ", "token": "2885"},
+        {"exch_seg": "NSE", "symbol": "NIFTY24JULFUT", "token": "9999"},  # not -EQ
+        {"exch_seg": "BSE", "symbol": "RELIANCE-EQ", "token": "500325"},  # wrong exch
+    ]
+    m2 = instruments.build_angelone_map(angel_dump)
+    assert m2 == {"RELIANCE.NS": "2885"}
+
+
+def test_instrument_map_prefers_env_file(monkeypatch, tmp_path):
+    from app import instruments
+
+    path = tmp_path / "instruments.json"
+    path.write_text('{"reliance.ns": "NSE_EQ|X"}')
+    monkeypatch.setenv("INSTRUMENT_MAP_PATH", str(path))
+    # Keys are normalised to upper case; no network download is attempted.
+    monkeypatch.setattr(instruments, "download_map",
+                        lambda p: (_ for _ in ()).throw(AssertionError("no download")))
+    assert instruments.load_map("upstox") == {"RELIANCE.NS": "NSE_EQ|X"}
+
+
+def test_instrument_map_download_failure_is_graceful(monkeypatch):
+    from app import instruments
+
+    monkeypatch.delenv("INSTRUMENT_MAP_PATH", raising=False)
+    monkeypatch.setattr(instruments, "DEFAULT_MAP_PATH", "/nonexistent/instruments.json")
+    monkeypatch.setattr(instruments, "download_map",
+                        lambda p: (_ for _ in ()).throw(OSError("offline")))
+    assert instruments.load_map("upstox") == {}  # quotes fall back to Yahoo
+
+
 def test_default_portfolio_is_all_indian():
     from app import config
 

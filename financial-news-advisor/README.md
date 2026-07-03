@@ -22,13 +22,35 @@ can trade the zero-config defaults for higher-quality official data:
 | **Live quotes** | `QUOTE_PROVIDER` | `yahoo` (default — keyless, NSE/BSE/US in one API, ~15 min delayed), `upstox` (free, real-time NSE/BSE), `angelone` (free, real-time) |
 
 Yahoo is the default only because it is the one keyless API spanning
-NSE+BSE+US; it is unofficial and increasingly rate-limited. A broker provider
-(**Upstox** / **Angel One** — both free with an account) gives official,
-real-time NSE data: set `QUOTE_PROVIDER`, supply the access token
-(`UPSTOX_ACCESS_TOKEN`, or `ANGELONE_API_KEY` + `ANGELONE_ACCESS_TOKEN`), and
-point `INSTRUMENT_MAP_PATH` at a JSON `{ "RELIANCE.NS": "<instrument-key>" }`
-map. Any symbol a broker can't price (e.g. US holdings) falls back to Yahoo
-automatically, so the app always keeps working.
+NSE+BSE+US; it is unofficial and increasingly rate-limited. Any symbol a
+broker can't price (e.g. US holdings) falls back to Yahoo automatically, so
+the app always keeps working.
+
+#### Real-time NSE quotes via Upstox (~10 min, free)
+
+1. Open a free Upstox account if you don't have one, then create a developer
+   app at <https://account.upstox.com/developer/apps>. Set its **Redirect
+   URL** to `https://127.0.0.1` and note the **API Key** and **API Secret**.
+2. Get an access token — the helper walks you through the browser login:
+   ```bash
+   python scripts/get_upstox_token.py
+   ```
+3. Set the environment variables where the app runs:
+   ```
+   QUOTE_PROVIDER=upstox
+   UPSTOX_ACCESS_TOKEN=<from step 2>
+   ```
+   On Render: service → **Environment** tab → add both → Save (auto-redeploys).
+4. Instrument keys resolve automatically: on first use the app downloads
+   Upstox's public instrument list and maps `RELIANCE.NS`-style symbols to
+   instrument keys itself. To pin the map instead (offline/faster startup):
+   `python scripts/build_instrument_map.py --provider upstox` and set
+   `INSTRUMENT_MAP_PATH=instruments.json`.
+
+**Caveat:** Upstox access tokens expire daily (~3:30 AM IST), so re-run step
+2 each trading day and update the env var. Angel One works the same way
+(`QUOTE_PROVIDER=angelone`, `ANGELONE_API_KEY` + `ANGELONE_ACCESS_TOKEN`,
+`--provider angelone` for the map script).
 
 > ⚠ **Educational project only.** The recommendations are derived from a
 > hand-rolled sentiment model over public news headlines. They are not
