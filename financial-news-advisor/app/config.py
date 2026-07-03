@@ -91,13 +91,14 @@ ANGELONE_API_KEY = os.environ.get("ANGELONE_API_KEY", "")
 ANGELONE_ACCESS_TOKEN = os.environ.get("ANGELONE_ACCESS_TOKEN", "")
 
 # Tickers seeded into the portfolio on first run so the dashboard has
-# something to show; the user can remove them freely. NSE symbols use the
-# Yahoo Finance ".NS" suffix; AAPL is included as a US-via-LRS example.
+# something to show; the user can remove them freely. All-Indian defaults —
+# NSE symbols carry the ".NS" suffix used by market-data APIs (".BO" = BSE).
+# US stocks (e.g. AAPL, held via LRS) are still supported when added manually.
 DEFAULT_PORTFOLIO = [
     ("RELIANCE.NS", "Reliance Industries"),
     ("TCS.NS", "Tata Consultancy Services"),
     ("HDFCBANK.NS", "HDFC Bank"),
     ("INFY.NS", "Infosys"),
     ("TATAMOTORS.NS", "Tata Motors"),
-    ("AAPL", "Apple"),
+    ("HAL.NS", "Hindustan Aeronautics"),
 ]

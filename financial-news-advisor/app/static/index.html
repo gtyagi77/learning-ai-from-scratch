@@ -82,6 +82,11 @@
   }
   .card-head { display: flex; align-items: center; gap: 10px; }
   .tick { font-size: 18px; font-weight: 700; }
+  .exch {
+    font-size: 10px; font-weight: 700; letter-spacing: .05em; color: var(--muted);
+    background: var(--neutral-chip); padding: 2px 7px; border-radius: 5px;
+  }
+  .rationale { font-size: 12px; color: var(--muted); line-height: 1.45; }
   .cname { color: var(--muted); font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .remove { background: none; border: 0; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; }
   .remove:hover { color: var(--critical-text); }
@@ -167,6 +172,11 @@
     <button id="refresh-btn" class="ghost">Crawl now</button>
   </div>
   <p class="status-line" id="action-line"></p>
+  <p class="status-line">Rating logic: average news sentiment over 48h, newer
+    headlines weighted more · signal ≥ +0.35 <strong>STRONG BUY</strong> ·
+    ≥ +0.12 <strong>BUY</strong> · −0.12…+0.12 <strong>HOLD</strong> ·
+    ≤ −0.12 <strong>SELL</strong> · ≤ −0.35 <strong>STRONG SELL</strong>.
+    Upside/downside = signal × 10% max move, scaled by confidence.</p>
   <div class="cards" id="cards"></div>
 
   <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
@@ -227,11 +237,26 @@ function fmtMoney(v, ccy) {
   return sym + v.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// "RELIANCE.NS" -> { base: "RELIANCE", exch: "NSE" }
+function splitSymbol(t) {
+  if (t.endsWith(".NS")) return { base: t.slice(0, -3), exch: "NSE" };
+  if (t.endsWith(".BO")) return { base: t.slice(0, -3), exch: "BSE" };
+  return { base: t, exch: "US" };
+}
+
+function moveLabel(pct, cls) {
+  if (pct == null) return "";
+  const word = pct >= 0.05 ? "Upside" : pct <= -0.05 ? "Downside" : "≈ flat";
+  const num = Math.abs(pct) < 0.05 ? "" : ` ${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}%`;
+  return `<span class="${cls} ${pct >= 0.05 ? "up" : pct <= -0.05 ? "down" : ""}">${word}${num}</span>`;
+}
+
 function card(r) {
+  const sym = splitSymbol(r.ticker);
   const chg = r.change_pct == null ? "" :
     `<span class="sub ${r.change_pct >= 0 ? "up" : "down"}">${r.change_pct >= 0 ? "▲" : "▼"} ${Math.abs(r.change_pct).toFixed(2)}% today</span>`;
-  const move = r.implied_move_pct == null ? "" :
-    `<span class="sub ${r.implied_move_pct >= 0 ? "up" : "down"}">${r.implied_move_pct >= 0 ? "+" : ""}${r.implied_move_pct.toFixed(1)}% implied</span>`;
+  const noQuote = r.current_price == null
+    ? `<span class="sub">live quote unavailable — showing % move only</span>` : "";
   const pct = Math.round((r.confidence || 0) * 100);
   const heads = (r.top_articles || []).map(a =>
     `<li>${chip(a.sentiment_label, a.sentiment)}
@@ -239,16 +264,19 @@ function card(r) {
   ).join("");
   return `<div class="card">
     <div class="card-head">
-      <span class="tick">${esc(r.ticker)}</span>
+      <span class="tick">${esc(sym.base)}</span>
+      <span class="exch">${sym.exch}</span>
       <span class="cname">${esc(r.name || "")}</span>
       <button class="remove" title="Remove ${esc(r.ticker)}" data-ticker="${esc(r.ticker)}">✕</button>
     </div>
-    <div>${badgeFor(r.action)}</div>
+    <div>${badgeFor(r.action)} ${moveLabel(r.implied_move_pct, "sub")}</div>
+    <div class="rationale">${esc(r.rationale || "")}</div>
     <div class="price-row">
       <div class="stat"><div class="lbl">Current</div>
-        <div class="val">${fmtMoney(r.current_price, r.currency)}</div>${chg}</div>
-      <div class="stat"><div class="lbl">Target (48h news-implied)</div>
-        <div class="val">${fmtMoney(r.target_price, r.currency)}</div>${move}</div>
+        <div class="val">${fmtMoney(r.current_price, r.currency)}</div>${chg}${noQuote}</div>
+      <div class="stat"><div class="lbl">48h target (news-implied)</div>
+        <div class="val">${fmtMoney(r.target_price, r.currency)}</div>
+        ${moveLabel(r.implied_move_pct, "sub")}</div>
     </div>
     <div class="meter-row">
       <span>Confidence</span>
@@ -279,20 +307,22 @@ async function loadNews() {
     <div class="news-item">
       ${chip(a.sentiment >= 0.10 ? "positive" : a.sentiment <= -0.10 ? "negative" : "neutral", a.sentiment)}
       <a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a>
-      <span class="tags">${(a.tickers || []).slice(0, 4).map(t => `<span class="tag">${esc(t)}</span>`).join("")}</span>
+      <span class="tags">${(a.tickers || []).slice(0, 4).map(t => `<span class="tag">${esc(splitSymbol(t).base)}</span>`).join("")}</span>
       <span class="news-meta">${esc(a.source)} · ${timeAgo(a.published_ts || a.fetched_ts)}</span>
     </div>`).join("") || `<p class="empty">No articles yet — the crawler is warming up.</p>`;
 }
 
 function scanRow(r, inPortfolio) {
-  const price = r.current_price == null ? "" :
-    `${fmtMoney(r.current_price, r.currency)} → <strong>${fmtMoney(r.target_price, r.currency)}</strong>`;
+  const sym = splitSymbol(r.ticker);
+  const price = r.current_price == null
+    ? moveLabel(r.implied_move_pct, "")
+    : `${fmtMoney(r.current_price, r.currency)} → <strong>${fmtMoney(r.target_price, r.currency)}</strong> ${moveLabel(r.implied_move_pct, "")}`;
   const top = (r.top_articles || [])[0];
   const addBtn = inPortfolio.has(r.ticker)
     ? `<span class="chip">in portfolio</span>`
     : `<button class="mini-add" data-ticker="${esc(r.ticker)}" data-name="${esc(r.name || "")}">+ add</button>`;
   return `<div class="scan-row">
-      <span class="sym">${esc(r.ticker)}</span>
+      <span class="sym">${esc(sym.base)} <span class="exch">${sym.exch}</span></span>
       <span class="co">${esc(r.name || "")}</span>
       ${badgeFor(r.action)}
       <span class="nums">signal ${r.signal >= 0 ? "+" : ""}${r.signal.toFixed(2)} ·

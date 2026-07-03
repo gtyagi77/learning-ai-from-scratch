@@ -52,6 +52,23 @@ def _confidence(weights: List[float], scores: List[float], signal: float) -> flo
     return round(min(1.0, 0.15 + 0.85 * (0.45 * volume + 0.35 * agreement + 0.20 * conviction)), 2)
 
 
+RATING_THRESHOLDS = (
+    "signal ≥ +0.35 STRONG BUY · ≥ +0.12 BUY · between −0.12 and +0.12 HOLD"
+    " · ≤ −0.12 SELL · ≤ −0.35 STRONG SELL"
+)
+
+
+def _rationale(signal: float, n_articles: int, action: str) -> str:
+    """One-sentence, plain-language explanation of how the rating was set."""
+    if n_articles == 0:
+        return "No news mentioning this stock in the last 48h — defaulting to HOLD."
+    return (
+        f"Average news sentiment {signal:+.2f} across {n_articles} recent "
+        f"article{'s' if n_articles != 1 else ''}, newer headlines weighted "
+        f"more → {action}."
+    )
+
+
 def _degree(confidence: float) -> str:
     if confidence >= 0.75:
         return "high"
@@ -86,14 +103,14 @@ def recommend_for_ticker(ticker: str, name: Optional[str] = None,
 
     want_quote = quote_mode == "always" or (quote_mode == "auto" and articles)
     quote = prices.get_quote(ticker) if want_quote else None
-    target_price = None
-    implied_move_pct = None
-    if quote:
-        # Scale the max implied move by signal strength and confidence, so
-        # weak/uncertain news implies a target close to the current price.
-        implied_move = signal * config.MAX_IMPLIED_MOVE * (0.4 + 0.6 * confidence)
-        implied_move_pct = round(implied_move * 100, 2)
-        target_price = round(quote["price"] * (1 + implied_move), 2)
+
+    # The news-implied move (upside/downside %) depends only on the signal
+    # and confidence, so it is always available — even when no live quote
+    # resolves and a ₹ target price cannot be anchored. Weak or uncertain
+    # news implies a move close to zero.
+    implied_move = signal * config.MAX_IMPLIED_MOVE * (0.4 + 0.6 * confidence)
+    implied_move_pct = round(implied_move * 100, 2)
+    target_price = round(quote["price"] * (1 + implied_move), 2) if quote else None
 
     top = sorted(
         articles,
@@ -109,6 +126,7 @@ def recommend_for_ticker(ticker: str, name: Optional[str] = None,
         "signal_label": sentiment.label(signal),
         "confidence": confidence,
         "degree": _degree(confidence),
+        "rationale": _rationale(signal, len(articles), _action(signal) if articles else "HOLD"),
         "news_count": len(articles),
         "current_price": quote["price"] if quote else None,
         "change_pct": quote["change_pct"] if quote else None,

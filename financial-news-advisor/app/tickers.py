@@ -240,6 +240,21 @@ AMBIGUOUS_SYMBOLS: Set[str] = {
     "PARAS", "E2E",
 }
 
+# Phrases that contain a company alias but are a *different* entity — mostly
+# brokerages and group subsidiaries quoted in analyst-note headlines ("Apple
+# target raised, says HDFC Securities"). A blocker match claims its text span
+# so the shorter alias inside it ("hdfc") cannot fire there.
+BLOCKER_NAMES: Set[str] = {
+    "hdfc securities", "hdfc amc", "hdfc mutual fund", "hdfc ergo",
+    "icici securities", "icici direct", "icici lombard",
+    "kotak securities", "kotak institutional equities", "kotak amc",
+    "kotak mutual fund", "axis securities", "axis capital", "axis amc",
+    "sbi securities", "sbi mutual fund", "sbi cards",
+    "tata mutual fund", "adani wilmar", "bajaj allianz",
+    "reliance securities", "reliance general insurance",
+    "mahindra finance", "mahindra holidays", "mahindra logistics",
+}
+
 _CASHTAG_RE = re.compile(r"\$([A-Z][A-Z0-9]{0,9}(?:[.\-][A-Z]{1,2})?)\b")
 # Exchange notation like "(NSE: RELIANCE)" or "(NASDAQ: AAPL)". The exchange
 # prefix is required so ordinary parenthesised words ("(IPO)") never match.
@@ -271,11 +286,24 @@ def extract_tickers(text: str, universe: Iterable[str], extra_names: Dict[str, s
     for match in _SYMBOL_RE.findall(text or ""):
         found.add(resolve_symbol(match))
 
+    # Name matching is longest-alias-first: once a longer phrase claims a
+    # span of text ("hdfc securities", "hdfc life"), a shorter alias inside
+    # it ("hdfc") cannot also fire on that span — so an analyst quote from
+    # HDFC Securities no longer tags HDFC Bank. The alias can still match
+    # elsewhere in the same article.
     names = dict(COMPANY_MAP)
     names.update(extra_names)
-    for name, symbol in names.items():
-        if re.search(r"\b" + re.escape(name) + r"\b", lower):
-            found.add(symbol)
+    candidates = [(n, s) for n, s in names.items()]
+    candidates += [(b, None) for b in BLOCKER_NAMES]
+    claimed: List[tuple] = []
+    for name, symbol in sorted(candidates, key=lambda ns: -len(ns[0])):
+        for m in re.finditer(r"\b" + re.escape(name) + r"\b", lower):
+            span = m.span()
+            if any(span[0] < e and s < span[1] for s, e in claimed):
+                continue
+            claimed.append(span)
+            if symbol:
+                found.add(symbol)
 
     for symbol in universe:
         symbol = symbol.upper()

@@ -269,6 +269,67 @@ def test_quote_shape_and_change_pct(monkeypatch):
     assert q == {"price": 110.0, "previous_close": 100.0, "currency": "INR", "change_pct": 10.0}
 
 
+def test_brokerage_name_does_not_tag_parent_bank():
+    # "HDFC Securities" is a brokerage, not HDFC Bank — an Apple analyst
+    # note quoting it must not be attributed to HDFCBANK.NS.
+    text = "Apple gets a target price hike from HDFC Securities after strong results"
+    found = tickers.extract_tickers(text, [], {})
+    assert "AAPL" in found
+    assert "HDFCBANK.NS" not in found
+    # Kotak Securities likewise must not tag Kotak Mahindra Bank.
+    found2 = tickers.extract_tickers("Kotak Securities upgrades Infosys", [], {})
+    assert "INFY.NS" in found2 and "KOTAKBANK.NS" not in found2
+
+
+def test_real_bank_mention_still_tags():
+    found = tickers.extract_tickers("HDFC Bank Q1 profit beats estimates", [], {})
+    assert "HDFCBANK.NS" in found
+    # Both entities in one article: brokerage span blocked, bank still tagged.
+    both = tickers.extract_tickers(
+        "HDFC Bank rallies; HDFC Securities sees more upside for Apple", [], {})
+    assert "HDFCBANK.NS" in both and "AAPL" in both
+
+
+def test_holding_feed_only_tags_real_mentions():
+    from app import crawler
+
+    assert crawler._holding_mentioned(
+        "HDFC Bank slips as NPAs rise", "HDFCBANK.NS", "HDFC Bank")
+    assert crawler._holding_mentioned(
+        "TATAMOTORS hits 52-week high", "TATAMOTORS.NS", "Tata Motors")
+    # An off-topic article from the holding's Google News feed is NOT
+    # force-attributed to the holding.
+    assert not crawler._holding_mentioned(
+        "Apple surges on record iPhone sales", "HDFCBANK.NS", "HDFC Bank")
+    # Substrings don't count as symbol mentions ("watches" contains "tcs"? no,
+    # but guard word boundaries generally).
+    assert not crawler._holding_mentioned(
+        "Investors watch IT stocks closely", "TCS.NS", None)
+
+
+def test_implied_move_without_quote(monkeypatch):
+    from app import prices, recommender
+
+    now = time.time()
+    database.insert_article(
+        "Test", "Bharat Corp surges on record defence order win",
+        "https://example.com/bc1", "Strong quarter.", now - 600, 0.8, ["BHARATC"],
+    )
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    rec = recommender.recommend_for_ticker("BHARATC")
+    assert rec["current_price"] is None and rec["target_price"] is None
+    # Upside/downside is still stated even without a live quote.
+    assert rec["implied_move_pct"] is not None and rec["implied_move_pct"] > 0
+    assert "STRONG BUY" in rec["rationale"] or "BUY" in rec["rationale"]
+    assert "+0." in rec["rationale"]  # the signal value is shown
+
+
+def test_default_portfolio_is_all_indian():
+    from app import config
+
+    assert all(t.endswith(".NS") for t, _ in config.DEFAULT_PORTFOLIO)
+
+
 def test_universe_is_well_formed():
     import re as _re
     from app import universe

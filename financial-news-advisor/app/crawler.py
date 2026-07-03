@@ -1,6 +1,7 @@
 """Background crawler: polls news feeds, scores articles, stores them."""
 
 import logging
+import re
 import threading
 import time
 import urllib.parse
@@ -40,6 +41,19 @@ def _fetch(url: str) -> str:
     return resp.text
 
 
+def _holding_mentioned(text: str, symbol: str, name: Optional[str]) -> bool:
+    """True when the holding's company name or base symbol actually appears
+    in the article text. Google News search results are relevance-ranked and
+    can drift off-topic, so per-holding feed items are only attributed to the
+    holding when it is genuinely mentioned — otherwise the article is stored
+    as general market news."""
+    lower = (text or "").lower()
+    if name and re.search(r"\b" + re.escape(name.lower()) + r"\b", lower):
+        return True
+    base = symbol.split(".")[0].lower()
+    return bool(re.search(r"\b" + re.escape(base) + r"\b", lower))
+
+
 def _holding_feed(symbol: str, name: Optional[str]) -> Optional[str]:
     """Build the per-holding news feed URL for the configured provider."""
     provider = config.TICKER_NEWS_PROVIDER
@@ -70,6 +84,7 @@ def crawl_once() -> int:
     """Poll every feed once; returns the number of newly stored articles."""
     started = time.time()
     portfolio = database.get_portfolio()
+    holding_names = {h["ticker"]: h.get("name") for h in portfolio}
     # Articles are attributed against the whole watch universe (Nifty 50 +
     # sector baskets), not just the portfolio, so the market scan works.
     symbols = set(universe.watch_symbols())
@@ -97,10 +112,12 @@ def crawl_once() -> int:
             text = f"{item.title}. {item.summary}"
             score = sentiment.score_article(item.title, item.summary)
             mentioned = tickers.extract_tickers(text, symbols, extra_names)
-            # Per-holding feeds are implicitly about that holding.
+            # Per-holding feed items are attributed to the holding only when
+            # the article really mentions it (see _holding_mentioned).
             if source.startswith("Holding:"):
                 symbol = source.split(":", 1)[1]
-                if symbol not in mentioned:
+                if symbol not in mentioned and _holding_mentioned(
+                        text, symbol, holding_names.get(symbol)):
                     mentioned.append(symbol)
             published = item.published.timestamp() if item.published else None
             if database.insert_article(source, item.title, item.link,
