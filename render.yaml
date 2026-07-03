@@ -1,0 +1,22 @@
+# Render Blueprint — one-click deploy of the Financial News Portfolio Advisor.
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: push this repo to GitHub, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at this repo (or use the Deploy to
+# Render button in financial-news-advisor/README.md). Render reads this file,
+# builds the Docker image and gives you a public https URL.
+services:
+  - type: web
+    name: financial-news-advisor
+    runtime: docker
+    rootDir: financial-news-advisor
+    plan: free            # free web service; spins down when idle
+    healthCheckPath: /api/status
+    autoDeploy: true       # redeploy on every push to the branch
+    envVars:
+      - key: TICKER_NEWS_PROVIDER
+        value: google      # Google News per holding (keyless)
+      - key: QUOTE_PROVIDER
+        value: yahoo       # keyless quotes; swap to upstox/angelone + creds
+      - key: CRAWL_INTERVAL_SECONDS
+        value: "180"       # gentler polling on a small free instance

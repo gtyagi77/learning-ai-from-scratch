@@ -87,6 +87,41 @@ pip install -r requirements.txt
 python run.py            # serves http://127.0.0.1:8000
 ```
 
+### Or run it in Docker
+
+```bash
+docker build -t advisor .
+docker run -p 8000:8000 advisor        # serves http://127.0.0.1:8000
+```
+
+## Host it (get a public URL)
+
+The app is a live backend (it crawls news continuously), so it needs a host
+that runs a process, not static file hosting. It ships with a `Dockerfile`
+and a Render Blueprint (`render.yaml` at the repo root) for a free deploy.
+
+**Render (free tier, ~3 min):**
+
+1. Push this repo to GitHub (already done for the working branch).
+2. In the [Render dashboard](https://dashboard.render.com/) choose
+   **New + → Blueprint**, pick this repo, and select the branch to deploy.
+   Render reads `render.yaml`, builds the Docker image, and gives you a
+   public `https://…onrender.com` URL.
+3. Open the URL. The crawler starts immediately; first recommendations
+   appear within a minute.
+
+Once `render.yaml` is on your default branch you can also use a one-click
+button — add this to point at your fork:
+`https://render.com/deploy?repo=https://github.com/gtyagi77/learning-ai-from-scratch`
+
+**Notes for the free tier:** the instance spins down after ~15 min idle, so
+the first hit after a pause takes ~30–60 s to wake (cold start). Data is
+stored in SQLite on the instance's local disk, which resets on redeploy — the
+crawler simply re-populates it. For real-time NSE quotes instead of delayed
+Yahoo data, set `QUOTE_PROVIDER=upstox` (or `angelone`) plus the token env
+vars in the Render service settings. The same image runs on Railway, Fly.io,
+or Google Cloud Run — anything that runs a container and sets `$PORT`.
+
 The dashboard seeds a demo portfolio (Reliance, TCS, HDFC Bank, Infosys,
 Tata Motors, and Apple as a US-via-LRS example) on first run — add/remove
 your own tickers from the UI. NSE quotes render in ₹ with Indian digit

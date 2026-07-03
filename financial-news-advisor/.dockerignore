@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+advisor.db
+.pytest_cache/
+tests/
+.git/
