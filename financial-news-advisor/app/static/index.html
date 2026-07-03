@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Financial News Portfolio Advisor</title>
+<style>
+  :root {
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --border: rgba(11,11,11,0.10);
+    --accent: #2a78d6;
+    --good: #0ca30c;
+    --good-text: #006300;
+    --serious: #ec835a;
+    --serious-text: #a34b1f;
+    --critical: #d03b3b;
+    --critical-text: #b32020;
+    --neutral-chip: #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --border: rgba(255,255,255,0.10);
+      --accent: #3987e5;
+      --good: #0ca30c;
+      --good-text: #0ca30c;
+      --serious: #ec835a;
+      --serious-text: #ec835a;
+      --critical: #d03b3b;
+      --critical-text: #e66767;
+      --neutral-chip: #383835;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+  h1 { font-size: 22px; margin: 0; }
+  .status-line { color: var(--muted); font-size: 13px; }
+  .disclaimer {
+    margin: 14px 0 22px; padding: 10px 14px; border: 1px solid var(--border);
+    border-left: 3px solid var(--serious); border-radius: 6px;
+    background: var(--surface); color: var(--ink-2); font-size: 13px;
+  }
+  h2 { font-size: 16px; margin: 28px 0 12px; }
+  /* --- add ticker form --- */
+  .add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .add-row input {
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; font: inherit; font-size: 14px;
+  }
+  .add-row input#ticker-input { width: 110px; text-transform: uppercase; }
+  .add-row input#name-input { width: 220px; }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+    padding: 8px 14px; font: inherit; font-size: 14px; cursor: pointer;
+  }
+  button.ghost {
+    background: transparent; color: var(--ink-2); border: 1px solid var(--border);
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  /* --- recommendation cards --- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-head { display: flex; align-items: center; gap: 10px; }
+  .tick { font-size: 18px; font-weight: 700; }
+  .cname { color: var(--muted); font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .remove { background: none; border: 0; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+  .remove:hover { color: var(--critical-text); }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-weight: 700; font-size: 13px; letter-spacing: .4px;
+    padding: 4px 10px; border-radius: 999px; border: 1.5px solid;
+  }
+  .badge.buy    { color: var(--good-text); border-color: var(--good); }
+  .badge.sell   { color: var(--serious-text); border-color: var(--serious); }
+  .badge.strongsell { color: var(--critical-text); border-color: var(--critical); }
+  .badge.hold   { color: var(--ink-2); border-color: var(--grid); }
+  .price-row { display: flex; gap: 22px; flex-wrap: wrap; }
+  .stat .lbl { color: var(--muted); font-size: 12px; }
+  .stat .val { font-size: 20px; font-weight: 600; }
+  .stat .sub { font-size: 12px; color: var(--ink-2); }
+  .up { color: var(--good-text); }
+  .down { color: var(--critical-text); }
+  /* confidence meter: single-value bar, thin mark, rounded data end */
+  .meter-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-2); }
+  .meter { flex: 1; height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+  .meter > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+  .headlines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .headlines li { font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+  .headlines a { color: var(--ink-2); text-decoration: none; }
+  .headlines a:hover { color: var(--ink); text-decoration: underline; }
+  .chip {
+    flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px;
+    border-radius: 999px; background: var(--neutral-chip); color: var(--ink-2);
+  }
+  .chip.pos { color: var(--good-text); }
+  .chip.neg { color: var(--critical-text); }
+  .empty { color: var(--muted); font-size: 13px; }
+  /* --- news feed --- */
+  .news-item {
+    display: flex; gap: 10px; align-items: baseline; padding: 9px 2px;
+    border-bottom: 1px solid var(--grid); font-size: 14px;
+  }
+  .news-item a { color: var(--ink); text-decoration: none; }
+  .news-item a:hover { text-decoration: underline; }
+  .news-meta { color: var(--muted); font-size: 12px; flex: none; }
+  .tags { flex: none; display: flex; gap: 4px; }
+  .tag { font-size: 11px; font-weight: 600; color: var(--accent); }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📈 Financial News Portfolio Advisor</h1>
+    <span class="status-line" id="status-line">connecting…</span>
+  </header>
+  <div class="disclaimer">
+    ⚠ Recommendations and target prices are generated automatically from news
+    sentiment for <strong>educational purposes only</strong>. This is not
+    investment advice.
+  </div>
+
+  <h2>Portfolio</h2>
+  <div class="add-row">
+    <input id="ticker-input" placeholder="Ticker (AAPL)" maxlength="10">
+    <input id="name-input" placeholder="Company name (optional)">
+    <button id="add-btn">Add to portfolio</button>
+    <button id="refresh-btn" class="ghost">Crawl now</button>
+  </div>
+  <p class="status-line" id="action-line"></p>
+  <div class="cards" id="cards"></div>
+
+  <h2>Latest market news</h2>
+  <div id="news"></div>
+
+  <footer>
+    Sources: public RSS feeds (Yahoo Finance, CNBC, MarketWatch, Seeking Alpha,
+    Investing.com, Business Insider). Sentiment: from-scratch financial lexicon.
+    Quotes: Yahoo Finance (delayed). Auto-refreshes every 60&nbsp;seconds.
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s ?? "";
+  return d.innerHTML;
+}
+
+function timeAgo(ts) {
+  if (!ts) return "";
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 90) return "just now";
+  if (s < 3600) return Math.round(s / 60) + "m ago";
+  if (s < 86400) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
+}
+
+function badgeFor(action) {
+  const cls = action === "STRONG SELL" ? "strongsell"
+    : action.includes("SELL") ? "sell"
+    : action.includes("BUY") ? "buy" : "hold";
+  const icon = action.includes("BUY") ? "▲" : action.includes("SELL") ? "▼" : "▬";
+  return `<span class="badge ${cls}">${icon} ${esc(action)}</span>`;
+}
+
+function chip(label, score) {
+  const cls = score >= 0.10 ? "pos" : score <= -0.10 ? "neg" : "";
+  return `<span class="chip ${cls}">${esc(label)}</span>`;
+}
+
+function fmtMoney(v, ccy) {
+  if (v == null) return "—";
+  const sym = ccy === "USD" || !ccy ? "$" : ccy + " ";
+  return sym + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function card(r) {
+  const chg = r.change_pct == null ? "" :
+    `<span class="sub ${r.change_pct >= 0 ? "up" : "down"}">${r.change_pct >= 0 ? "▲" : "▼"} ${Math.abs(r.change_pct).toFixed(2)}% today</span>`;
+  const move = r.implied_move_pct == null ? "" :
+    `<span class="sub ${r.implied_move_pct >= 0 ? "up" : "down"}">${r.implied_move_pct >= 0 ? "+" : ""}${r.implied_move_pct.toFixed(1)}% implied</span>`;
+  const pct = Math.round((r.confidence || 0) * 100);
+  const heads = (r.top_articles || []).map(a =>
+    `<li>${chip(a.sentiment_label, a.sentiment)}
+        <a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a></li>`
+  ).join("");
+  return `<div class="card">
+    <div class="card-head">
+      <span class="tick">${esc(r.ticker)}</span>
+      <span class="cname">${esc(r.name || "")}</span>
+      <button class="remove" title="Remove ${esc(r.ticker)}" data-ticker="${esc(r.ticker)}">✕</button>
+    </div>
+    <div>${badgeFor(r.action)}</div>
+    <div class="price-row">
+      <div class="stat"><div class="lbl">Current</div>
+        <div class="val">${fmtMoney(r.current_price, r.currency)}</div>${chg}</div>
+      <div class="stat"><div class="lbl">Target (48h news-implied)</div>
+        <div class="val">${fmtMoney(r.target_price, r.currency)}</div>${move}</div>
+    </div>
+    <div class="meter-row">
+      <span>Confidence</span>
+      <div class="meter"><span style="width:${pct}%"></span></div>
+      <span><strong>${esc(r.degree)}</strong> (${pct}%)</span>
+    </div>
+    <div class="meter-row"><span>News signal: <strong>${r.signal >= 0 ? "+" : ""}${(r.signal ?? 0).toFixed(2)}</strong>
+      (${esc(r.signal_label)}, ${r.news_count} article${r.news_count === 1 ? "" : "s"} in window)</span></div>
+    ${heads ? `<ul class="headlines">${heads}</ul>` : `<p class="empty">No recent news mentioning this ticker yet.</p>`}
+  </div>`;
+}
+
+async function loadRecommendations() {
+  const res = await fetch("/api/recommendations");
+  const data = await res.json();
+  const recs = data.recommendations || [];
+  $("cards").innerHTML = recs.length
+    ? recs.map(card).join("")
+    : `<p class="empty">Portfolio is empty — add a ticker above.</p>`;
+  document.querySelectorAll(".remove").forEach(btn =>
+    btn.addEventListener("click", () => removeTicker(btn.dataset.ticker)));
+}
+
+async function loadNews() {
+  const res = await fetch("/api/news?limit=30");
+  const data = await res.json();
+  $("news").innerHTML = (data.articles || []).map(a => `
+    <div class="news-item">
+      ${chip(a.sentiment >= 0.10 ? "positive" : a.sentiment <= -0.10 ? "negative" : "neutral", a.sentiment)}
+      <a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+      <span class="tags">${(a.tickers || []).slice(0, 4).map(t => `<span class="tag">${esc(t)}</span>`).join("")}</span>
+      <span class="news-meta">${esc(a.source)} · ${timeAgo(a.published_ts || a.fetched_ts)}</span>
+    </div>`).join("") || `<p class="empty">No articles yet — the crawler is warming up.</p>`;
+}
+
+async function loadStatus() {
+  const res = await fetch("/api/status");
+  const s = await res.json();
+  const c = s.crawler || {};
+  $("status-line").textContent =
+    `${s.articles_stored} articles stored · last crawl ${c.last_run ? timeAgo(c.last_run) : "pending"}` +
+    ` · ${c.feeds_ok ?? 0} feeds ok` + (c.feeds_failed ? `, ${c.feeds_failed} failed` : "");
+}
+
+async function addTicker() {
+  const ticker = $("ticker-input").value.trim().toUpperCase();
+  if (!ticker) return;
+  const name = $("name-input").value.trim() || null;
+  $("add-btn").disabled = true;
+  try {
+    const res = await fetch("/api/portfolio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker, name }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail?.[0]?.msg || "failed");
+    $("ticker-input").value = ""; $("name-input").value = "";
+    $("action-line").textContent = `${ticker} added — crawling its news feed…`;
+    await fetch("/api/crawl", { method: "POST" });
+    await refreshAll();
+    $("action-line").textContent = "";
+  } catch (e) {
+    $("action-line").textContent = `Could not add ${ticker}: ${e.message}`;
+  } finally {
+    $("add-btn").disabled = false;
+  }
+}
+
+async function removeTicker(ticker) {
+  await fetch(`/api/portfolio/${encodeURIComponent(ticker)}`, { method: "DELETE" });
+  await loadRecommendations();
+}
+
+async function crawlNow() {
+  $("refresh-btn").disabled = true;
+  $("action-line").textContent = "Crawling feeds…";
+  try {
+    const res = await fetch("/api/crawl", { method: "POST" });
+    const data = await res.json();
+    $("action-line").textContent = `Crawl finished: ${data.new_articles} new article(s).`;
+  } catch { $("action-line").textContent = "Crawl failed."; }
+  await refreshAll();
+  $("refresh-btn").disabled = false;
+}
+
+async function refreshAll() {
+  await Promise.allSettled([loadStatus(), loadRecommendations(), loadNews()]);
+}
+
+$("add-btn").addEventListener("click", addTicker);
+$("ticker-input").addEventListener("keydown", e => { if (e.key === "Enter") addTicker(); });
+$("name-input").addEventListener("keydown", e => { if (e.key === "Enter") addTicker(); });
+$("refresh-btn").addEventListener("click", crawlNow);
+
+refreshAll();
+setInterval(refreshAll, 60000);
+</script>
+</body>
+</html>
