@@ -38,10 +38,17 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
    article gets a score in [-1, 1], headline weighted over summary.
 3. **Ticker extraction** (`app/tickers.py`) attributes articles to symbols via
    exchange notation (`(NSE: RELIANCE)`, `(NASDAQ: AAPL)`), cashtags, and a
-   company-name map of ~130 NSE names and ~80 US large caps. Bare NSE symbols
+   company-name map of ~170 NSE names and ~80 US large caps. Bare NSE symbols
    are resolved to Yahoo's `.NS` form (`RELIANCE` → `RELIANCE.NS`); BSE codes
    use `.BO`.
-4. **Recommender** (`app/recommender.py`) combines the last 48 h of articles
+4. **Watch universe** (`app/universe.py`) — every crawl attributes news
+   against the full Nifty 50 plus thematic baskets (AI & IT, data centers &
+   digital infrastructure, energy & power, defence), ~100 stocks in all.
+   The **market scan** ranks whichever of them have news in the window by
+   signal strength, per sector, and any of them can be added to the
+   portfolio with one click. Index membership changes over time — the lists
+   are plain data in `universe.py`, edit them there.
+5. **Recommender** (`app/recommender.py`) combines the last 48 h of articles
    per ticker with exponential recency decay (12 h half-life) into one signal,
    then:
    - **Action**: signal ≥ 0.35 → STRONG BUY, ≥ 0.12 → BUY, ≤ -0.12 → SELL,
@@ -71,6 +78,7 @@ grouping. Data persists in `advisor.db`.
 |---|---|
 | `GET /` | Dashboard |
 | `GET /api/recommendations` | Action + confidence + target price per holding |
+| `GET /api/scan` | Same signals across the whole watch universe, grouped by sector |
 | `GET /api/recommendations/{ticker}` | Same for any single ticker |
 | `GET /api/news?ticker=&limit=` | Crawled articles with sentiment |
 | `GET /api/portfolio` / `POST /api/portfolio` / `DELETE /api/portfolio/{t}` | Manage holdings |

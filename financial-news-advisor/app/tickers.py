@@ -143,6 +143,45 @@ INDIA_COMPANY_MAP: Dict[str, str] = {
     "siemens india": "SIEMENS.NS",
     "abb india": "ABB.NS",
     "cummins india": "CUMMINSIND.NS",
+    # --- AI / IT services & products ---
+    "kpit": "KPITTECH.NS",
+    "cyient": "CYIENT.NS",
+    "oracle financial services": "OFSS.NS",
+    "affle": "AFFLE.NS",
+    "netweb": "NETWEB.NS",
+    # --- data centers & digital infrastructure ---
+    "tata communications": "TATACOMM.NS",
+    "indus towers": "INDUSTOWER.NS",
+    "railtel": "RAILTEL.NS",
+    "anant raj": "ANANTRAJ.NS",
+    "e2e networks": "E2E.NS",
+    # --- energy & power ---
+    "hindustan petroleum": "HINDPETRO.NS", "hpcl": "HINDPETRO.NS",
+    "oil india": "OIL.NS",
+    "petronet": "PETRONET.NS",
+    "jsw energy": "JSWENERGY.NS",
+    "adani energy solutions": "ADANIENSOL.NS",
+    "torrent power": "TORNTPOWER.NS",
+    "cesc": "CESC.NS",
+    "sjvn": "SJVN.NS",
+    "ireda": "IREDA.NS",
+    "inox wind": "INOXWIND.NS",
+    # --- defence ---
+    "bharat dynamics": "BDL.NS",
+    "mazagon dock": "MAZDOCK.NS",
+    "cochin shipyard": "COCHINSHIP.NS",
+    "garden reach": "GRSE.NS",
+    "beml": "BEML.NS",
+    "mishra dhatu": "MIDHANI.NS", "midhani": "MIDHANI.NS",
+    "solar industries": "SOLARINDS.NS",
+    "data patterns": "DATAPATTNS.NS",
+    "zen technologies": "ZENTEC.NS",
+    "astra microwave": "ASTRAMICRO.NS",
+    "paras defence": "PARAS.NS",
+    "ideaforge": "IDEAFORGE.NS",
+    "bharat forge": "BHARATFORG.NS",
+    # --- other Nifty 50 members ---
+    "shriram finance": "SHRIRAMFIN.NS",
 }
 
 # US large caps reachable for Indian retail investors via LRS (and the odd
@@ -197,7 +236,8 @@ AMBIGUOUS_SYMBOLS: Set[str] = {
     "OR", "OUT", "PM", "REAL", "SEE", "SHE", "SO", "TECH", "THE", "TOP",
     "TWO", "UK", "UP", "US", "USA", "WELL", "WHO", "YOU", "C", "F", "GS",
     "MA", "MS", "T", "V", "DE", "GE", "GM", "HD", "KO", "PG", "LT", "IDEA",
-    "SAIL", "TRENT", "MRF", "BEL", "HAL", "GAIL", "PNB", "DLF",
+    "SAIL", "TRENT", "MRF", "BEL", "HAL", "GAIL", "PNB", "DLF", "OIL",
+    "PARAS", "E2E",
 }
 
 _CASHTAG_RE = re.compile(r"\$([A-Z][A-Z0-9]{0,9}(?:[.\-][A-Z]{1,2})?)\b")

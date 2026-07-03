@@ -47,6 +47,10 @@ NEWS_FEEDS = [
     ("Financial Express Markets", "https://www.financialexpress.com/market/feed/"),
     ("NDTV Profit", "https://feeds.feedburner.com/ndtvprofit-latest"),
     ("Yahoo Nifty 50", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5ENSEI&region=IN&lang=en-IN"),
+    # Sector feeds for the thematic scan (AI/tech, energy, defence).
+    ("ET Tech", "https://economictimes.indiatimes.com/tech/rssfeeds/13357270.cms"),
+    ("ET Energy", "https://economictimes.indiatimes.com/industry/energy/rssfeeds/13358361.cms"),
+    ("ET Defence", "https://economictimes.indiatimes.com/news/defence/rssfeeds/44580387.cms"),
     # --- US / global (accessible to Indian retail via LRS) ---
     ("Yahoo S&P 500", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC&region=US&lang=en-US"),
     ("CNBC Top News", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),

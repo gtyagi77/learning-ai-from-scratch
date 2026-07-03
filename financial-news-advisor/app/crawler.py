@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple
 
 import requests
 
-from . import config, database, rss, sentiment, tickers
+from . import config, database, rss, sentiment, tickers, universe
 
 log = logging.getLogger("crawler")
 
@@ -53,10 +53,16 @@ def crawl_once() -> int:
     """Poll every feed once; returns the number of newly stored articles."""
     started = time.time()
     portfolio = database.get_portfolio()
-    universe = [h["ticker"] for h in portfolio]
+    # Articles are attributed against the whole watch universe (Nifty 50 +
+    # sector baskets), not just the portfolio, so the market scan works.
+    symbols = set(universe.watch_symbols())
+    symbols.update(h["ticker"] for h in portfolio)
     extra_names = {
-        h["name"].lower(): h["ticker"] for h in portfolio if h.get("name")
+        name.lower(): sym for sym, name in universe.WATCHLIST.items()
     }
+    extra_names.update(
+        {h["name"].lower(): h["ticker"] for h in portfolio if h.get("name")}
+    )
 
     new_count, ok, failed = 0, 0, 0
     for source, url in _feed_list():
@@ -73,7 +79,7 @@ def crawl_once() -> int:
                 continue
             text = f"{item.title}. {item.summary}"
             score = sentiment.score_article(item.title, item.summary)
-            mentioned = tickers.extract_tickers(text, universe, extra_names)
+            mentioned = tickers.extract_tickers(text, symbols, extra_names)
             # Per-ticker feeds are implicitly about that ticker.
             if source.startswith("Yahoo:"):
                 symbol = source.split(":", 1)[1]

@@ -115,6 +115,25 @@
   .chip.pos { color: var(--good-text); }
   .chip.neg { color: var(--critical-text); }
   .empty { color: var(--muted); font-size: 13px; }
+  /* --- market scan --- */
+  .sector { margin-bottom: 18px; }
+  .sector h3 { font-size: 14px; margin: 14px 0 6px; }
+  .sector h3 .cnt { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .scan-row {
+    display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+    padding: 8px 2px; border-bottom: 1px solid var(--grid); font-size: 14px;
+  }
+  .scan-row .sym { font-weight: 700; min-width: 120px; }
+  .scan-row .co { color: var(--muted); font-size: 12px; flex: 1; min-width: 140px; }
+  .scan-row .nums { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+  .scan-head {
+    display: block; font-size: 12px; color: var(--muted);
+    padding: 0 2px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mini-add {
+    background: transparent; color: var(--accent); border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 8px; font-size: 12px;
+  }
   /* --- news feed --- */
   .news-item {
     display: flex; gap: 10px; align-items: baseline; padding: 9px 2px;
@@ -149,6 +168,11 @@
   </div>
   <p class="status-line" id="action-line"></p>
   <div class="cards" id="cards"></div>
+
+  <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
+  <p class="status-line">News-driven signals across the whole watch universe
+    (AI &amp; IT, data centers, energy &amp; power, defence, Nifty 50), strongest first.</p>
+  <div id="scan"></div>
 
   <h2>Latest market news</h2>
   <div id="news"></div>
@@ -259,12 +283,54 @@ async function loadNews() {
     </div>`).join("") || `<p class="empty">No articles yet — the crawler is warming up.</p>`;
 }
 
+function scanRow(r, inPortfolio) {
+  const price = r.current_price == null ? "" :
+    `${fmtMoney(r.current_price, r.currency)} → <strong>${fmtMoney(r.target_price, r.currency)}</strong>`;
+  const top = (r.top_articles || [])[0];
+  const addBtn = inPortfolio.has(r.ticker)
+    ? `<span class="chip">in portfolio</span>`
+    : `<button class="mini-add" data-ticker="${esc(r.ticker)}" data-name="${esc(r.name || "")}">+ add</button>`;
+  return `<div class="scan-row">
+      <span class="sym">${esc(r.ticker)}</span>
+      <span class="co">${esc(r.name || "")}</span>
+      ${badgeFor(r.action)}
+      <span class="nums">signal ${r.signal >= 0 ? "+" : ""}${r.signal.toFixed(2)} ·
+        conf ${Math.round(r.confidence * 100)}% · ${r.news_count} news</span>
+      <span class="nums">${price}</span>
+      ${addBtn}
+    </div>
+    ${top ? `<a class="scan-head" href="${esc(top.link)}" target="_blank" rel="noopener">↳ ${esc(top.title)}</a>` : ""}`;
+}
+
+async function loadScan() {
+  const [scanRes, pfRes] = await Promise.all([fetch("/api/scan"), fetch("/api/portfolio")]);
+  const data = await scanRes.json();
+  const inPortfolio = new Set(((await pfRes.json()).holdings || []).map(h => h.ticker));
+  $("scan").innerHTML = (data.sectors || []).map(s => `
+    <div class="sector">
+      <h3>${esc(s.sector)} <span class="cnt">· ${s.with_news} of ${s.watched} watched have news</span></h3>
+      ${s.results.length ? s.results.map(r => scanRow(r, inPortfolio)).join("")
+        : `<p class="empty">No news signals in the window yet.</p>`}
+    </div>`).join("");
+  document.querySelectorAll(".mini-add").forEach(btn =>
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      await fetch("/api/portfolio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: btn.dataset.ticker, name: btn.dataset.name || null }),
+      });
+      await refreshAll();
+    }));
+}
+
 async function loadStatus() {
   const res = await fetch("/api/status");
   const s = await res.json();
   const c = s.crawler || {};
   $("status-line").textContent =
-    `${s.articles_stored} articles stored · last crawl ${c.last_run ? timeAgo(c.last_run) : "pending"}` +
+    `${s.articles_stored} articles stored · watching ${s.universe_size ?? "—"} stocks` +
+    ` · last crawl ${c.last_run ? timeAgo(c.last_run) : "pending"}` +
     ` · ${c.feeds_ok ?? 0} feeds ok` + (c.feeds_failed ? `, ${c.feeds_failed} failed` : "");
 }
 
@@ -310,7 +376,7 @@ async function crawlNow() {
 }
 
 async function refreshAll() {
-  await Promise.allSettled([loadStatus(), loadRecommendations(), loadNews()]);
+  await Promise.allSettled([loadStatus(), loadRecommendations(), loadScan(), loadNews()]);
 }
 
 $("add-btn").addEventListener("click", addTicker);

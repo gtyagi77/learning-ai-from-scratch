@@ -182,6 +182,50 @@ def test_no_news_means_hold():
     assert rec["confidence"] == 0.0
 
 
+def test_universe_is_well_formed():
+    import re as _re
+    from app import universe
+
+    assert len(universe.NIFTY_50) == 50
+    assert {"AI & IT", "Data Centers & Digital Infra", "Energy & Power",
+            "Defence", "Nifty 50"} == set(universe.SECTORS)
+    sym_re = _re.compile(r"^[A-Z0-9][A-Z0-9&\-]*\.NS$")
+    for members in universe.SECTORS.values():
+        for symbol, name in members:
+            assert sym_re.match(symbol), symbol
+            assert name
+    # Shared tickers dedupe into one watchlist entry.
+    assert len(universe.WATCHLIST) < sum(len(m) for m in universe.SECTORS.values())
+    assert universe.WATCHLIST["RELIANCE.NS"] == "Reliance Industries"
+
+
+def test_scan_universe_ranks_newsy_tickers(monkeypatch):
+    from app import prices, recommender
+
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    now = time.time()
+    database.insert_article(
+        "Test", "HAL wins record fighter jet order, shares surge",
+        "https://example.com/hal1", "Strong order book growth.", now - 900,
+        0.8, ["HAL.NS"],
+    )
+    database.insert_article(
+        "Test", "Suzlon Energy plunges as wind orders disappoint",
+        "https://example.com/suz1", "Weak quarter.", now - 900,
+        -0.7, ["SUZLON.NS"],
+    )
+    sectors = {s["sector"]: s for s in recommender.scan_universe()}
+    defence = sectors["Defence"]
+    assert any(r["ticker"] == "HAL.NS" and "BUY" in r["action"]
+               for r in defence["results"])
+    energy = sectors["Energy & Power"]
+    assert any(r["ticker"] == "SUZLON.NS" and "SELL" in r["action"]
+               for r in energy["results"])
+    # Tickers without news never appear in scan results.
+    for s in sectors.values():
+        assert all(r["news_count"] > 0 for r in s["results"])
+
+
 def test_portfolio_crud():
     database.upsert_holding("ACME", "Acme Corp")
     assert any(h["ticker"] == "ACME" for h in database.get_portfolio())

@@ -11,11 +11,10 @@ For each holding:
 Educational tooling only — not investment advice.
 """
 
-import math
 import time
 from typing import Dict, List, Optional
 
-from . import config, database, prices, sentiment
+from . import config, database, prices, sentiment, universe
 
 
 def _recency_weight(article: Dict, now: float) -> float:
@@ -63,7 +62,11 @@ def _degree(confidence: float) -> str:
     return "none"
 
 
-def recommend_for_ticker(ticker: str, name: Optional[str] = None) -> Dict:
+def recommend_for_ticker(ticker: str, name: Optional[str] = None,
+                         quote_mode: str = "always") -> Dict:
+    """quote_mode: "always" fetches a live quote unconditionally; "auto"
+    fetches one only when the ticker has news in the window — used by the
+    universe scan so a 100+ symbol sweep doesn't hammer the quote API."""
     ticker = ticker.upper()
     now = time.time()
     since = now - config.LOOKBACK_HOURS * 3600
@@ -81,7 +84,8 @@ def recommend_for_ticker(ticker: str, name: Optional[str] = None) -> Dict:
     confidence = _confidence(weights, scores, signal)
     action = _action(signal) if articles else "HOLD"
 
-    quote = prices.get_quote(ticker)
+    want_quote = quote_mode == "always" or (quote_mode == "auto" and articles)
+    quote = prices.get_quote(ticker) if want_quote else None
     target_price = None
     implied_move_pct = None
     if quote:
@@ -130,3 +134,32 @@ def recommend_portfolio() -> List[Dict]:
         recommend_for_ticker(h["ticker"], h.get("name"))
         for h in database.get_portfolio()
     ]
+
+
+def scan_universe(max_per_sector: int = 10) -> List[Dict]:
+    """Scan the whole watch universe (Nifty 50 + sector baskets) and return,
+    per sector, the tickers with news in the window ranked by signal
+    strength. Tickers shared between sectors are analysed once."""
+    cache: Dict[str, Dict] = {}
+    sectors = []
+    for sector, members in universe.SECTORS.items():
+        rows = []
+        seen = set()
+        for symbol, name in members:
+            if symbol in seen:
+                continue
+            seen.add(symbol)
+            rec = cache.get(symbol)
+            if rec is None:
+                rec = recommend_for_ticker(symbol, name, quote_mode="auto")
+                cache[symbol] = rec
+            if rec["news_count"] > 0:
+                rows.append(rec)
+        rows.sort(key=lambda r: abs(r["signal"]), reverse=True)
+        sectors.append({
+            "sector": sector,
+            "watched": len(members),
+            "with_news": len(rows),
+            "results": rows[:max_per_sector],
+        })
+    return sectors

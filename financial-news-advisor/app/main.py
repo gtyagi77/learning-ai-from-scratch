@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from . import config, crawler, database, recommender, tickers
+from . import config, crawler, database, recommender, tickers, universe
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -63,6 +63,7 @@ def status():
     return {
         "crawler": crawler.get_status(),
         "articles_stored": database.article_count(),
+        "universe_size": len(universe.WATCHLIST),
         "crawl_interval_s": config.CRAWL_INTERVAL_SECONDS,
         "lookback_hours": config.LOOKBACK_HOURS,
         "server_time": time.time(),
@@ -102,6 +103,20 @@ def recommendations():
             "purposes only. Not investment advice."
         ),
         "recommendations": recommender.recommend_portfolio(),
+    }
+
+
+@app.get("/api/scan")
+def scan(max_per_sector: int = 10):
+    """News-driven signals across the whole watch universe (Nifty 50 plus
+    the AI/IT, data center, energy and defence baskets), grouped by sector."""
+    return {
+        "generated_at": time.time(),
+        "disclaimer": (
+            "Automatically generated from news sentiment for educational "
+            "purposes only. Not investment advice."
+        ),
+        "sectors": recommender.scan_universe(max(1, min(max_per_sector, 25))),
     }
 
 
