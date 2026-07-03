@@ -131,7 +131,7 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>📈 Financial News Portfolio Advisor</h1>
+    <h1>📈 Financial News Portfolio Advisor — India</h1>
     <span class="status-line" id="status-line">connecting…</span>
   </header>
   <div class="disclaimer">
@@ -142,7 +142,7 @@
 
   <h2>Portfolio</h2>
   <div class="add-row">
-    <input id="ticker-input" placeholder="Ticker (AAPL)" maxlength="10">
+    <input id="ticker-input" placeholder="Ticker (RELIANCE.NS)" maxlength="20">
     <input id="name-input" placeholder="Company name (optional)">
     <button id="add-btn">Add to portfolio</button>
     <button id="refresh-btn" class="ghost">Crawl now</button>
@@ -154,9 +154,13 @@
   <div id="news"></div>
 
   <footer>
-    Sources: public RSS feeds (Yahoo Finance, CNBC, MarketWatch, Seeking Alpha,
-    Investing.com, Business Insider). Sentiment: from-scratch financial lexicon.
-    Quotes: Yahoo Finance (delayed). Auto-refreshes every 60&nbsp;seconds.
+    NSE stocks use the .NS suffix (RELIANCE.NS), BSE codes use .BO — known NSE
+    symbols are resolved automatically. US tickers (AAPL) are supported for
+    holdings via the RBI's Liberalised Remittance Scheme.<br>
+    Sources: public RSS feeds (Economic Times, Moneycontrol, LiveMint, Business
+    Standard, BusinessLine, Financial Express, NDTV Profit, Yahoo Finance, CNBC,
+    MarketWatch). Sentiment: from-scratch financial lexicon. Quotes: Yahoo
+    Finance (delayed). Auto-refreshes every 60&nbsp;seconds.
   </footer>
 </div>
 
@@ -193,8 +197,9 @@ function chip(label, score) {
 
 function fmtMoney(v, ccy) {
   if (v == null) return "—";
-  const sym = ccy === "USD" || !ccy ? "$" : ccy + " ";
-  return sym + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sym = ccy === "INR" ? "₹" : ccy === "USD" || !ccy ? "$" : ccy + " ";
+  const locale = ccy === "INR" ? "en-IN" : undefined; // Indian digit grouping (1,23,456.00)
+  return sym + v.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function card(r) {

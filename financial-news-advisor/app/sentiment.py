@@ -35,6 +35,7 @@ LEXICON: Dict[str, float] = {
     "outperforms": 1.8, "advances": 1.0, "booming": 1.8, "boom": 1.4,
     "demand": 0.8, "resilient": 1.2, "undervalued": 1.4, "attractive": 1.0,
     "smashes": 2.0, "crushes": 2.0, "surpasses": 1.6, "surpassed": 1.6,
+    "inflows": 1.2, "oversubscribed": 1.6, "multibagger": 1.8,
     # --- bearish ---
     "miss": -2.0, "misses": -2.0, "missed": -2.0, "plunge": -2.2,
     "plunges": -2.2, "plunged": -2.2, "crash": -2.4, "crashes": -2.4,
@@ -65,6 +66,7 @@ LEXICON: Dict[str, float] = {
     "breach": -1.6, "hack": -1.6, "hacked": -1.8, "resigns": -1.2,
     "resignation": -1.2, "plummet": -2.2, "plummets": -2.2,
     "wipeout": -2.0, "collapse": -2.2, "collapses": -2.2, "crisis": -1.8,
+    "outflows": -1.2, "npa": -1.4, "npas": -1.4, "undersubscribed": -1.4,
 }
 
 # Words that flip the polarity of the next few sentiment-bearing tokens.

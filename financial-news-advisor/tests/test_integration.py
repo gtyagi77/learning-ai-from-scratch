@@ -83,4 +83,12 @@ def test_full_pipeline(monkeypatch):
     assert client.delete("/api/portfolio/MSFT").status_code == 200
     assert client.delete("/api/portfolio/MSFT").status_code == 404
 
+    # Bare NSE symbols are resolved to their Yahoo .NS form.
+    resp = client.post("/api/portfolio", json={"ticker": "reliance"})
+    assert resp.status_code == 200 and resp.json()["ticker"] == "RELIANCE.NS"
+    assert client.delete("/api/portfolio/RELIANCE.NS").status_code == 200
+    resp = client.post("/api/portfolio", json={"ticker": "TATAMOTORS.NS", "name": "Tata Motors"})
+    assert resp.status_code == 200 and resp.json()["ticker"] == "TATAMOTORS.NS"
+    assert client.delete("/api/portfolio/TATAMOTORS.NS").status_code == 200
+
     server.shutdown()

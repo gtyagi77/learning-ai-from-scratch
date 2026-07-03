@@ -1,9 +1,15 @@
-# Financial News Portfolio Advisor
+# Financial News Portfolio Advisor — India
 
 A self-hosted site that crawls financial news in (near) real time and turns it
 into portfolio recommendations — an action (STRONG BUY → STRONG SELL), a
 **degree of recommendation** (confidence %), and a **news-implied target
 price** for every holding.
+
+Focused on **Indian markets**: NSE/BSE stocks quoted in ₹, Indian financial
+news sources (Economic Times, Moneycontrol, LiveMint, Business Standard,
+BusinessLine, Financial Express, NDTV Profit), plus US stocks — which Indian
+retail investors can hold through the RBI's Liberalised Remittance Scheme
+(LRS) — covered via Yahoo Finance, CNBC and MarketWatch feeds.
 
 > ⚠ **Educational project only.** The recommendations are derived from a
 > hand-rolled sentiment model over public news headlines. They are not
@@ -22,16 +28,19 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
                           Yahoo quote API (current price)
 ```
 
-1. **Crawler** (`app/crawler.py`) polls ~8 general market RSS feeds plus one
-   Yahoo Finance per-ticker feed for every portfolio holding, every 2 minutes.
-   The RSS/Atom parser (`app/rss.py`) is written from scratch on the standard
-   library.
+1. **Crawler** (`app/crawler.py`) polls ~14 market RSS feeds (11 Indian,
+   3 US/global) plus one Yahoo Finance per-ticker feed for every portfolio
+   holding, every 2 minutes. The RSS/Atom parser (`app/rss.py`) is written
+   from scratch on the standard library.
 2. **Sentiment** (`app/sentiment.py`) is a dependency-free, Loughran-McDonald
-   style financial lexicon with negation handling and intensifiers. Each
+   style financial lexicon with negation handling, intensifiers, and
+   India-market vocabulary (FII outflows, NPAs, IPO subscription). Each
    article gets a score in [-1, 1], headline weighted over summary.
 3. **Ticker extraction** (`app/tickers.py`) attributes articles to symbols via
-   cashtags (`$AAPL`), exchange notation (`(NASDAQ: AAPL)`), a company-name
-   map (~100 large caps), and portfolio symbols.
+   exchange notation (`(NSE: RELIANCE)`, `(NASDAQ: AAPL)`), cashtags, and a
+   company-name map of ~130 NSE names and ~80 US large caps. Bare NSE symbols
+   are resolved to Yahoo's `.NS` form (`RELIANCE` → `RELIANCE.NS`); BSE codes
+   use `.BO`.
 4. **Recommender** (`app/recommender.py`) combines the last 48 h of articles
    per ticker with exponential recency decay (12 h half-life) into one signal,
    then:
@@ -51,8 +60,10 @@ pip install -r requirements.txt
 python run.py            # serves http://127.0.0.1:8000
 ```
 
-The dashboard seeds a demo portfolio (AAPL, MSFT, NVDA, TSLA) on first run —
-add/remove your own tickers from the UI. Data persists in `advisor.db`.
+The dashboard seeds a demo portfolio (Reliance, TCS, HDFC Bank, Infosys,
+Tata Motors, and Apple as a US-via-LRS example) on first run — add/remove
+your own tickers from the UI. NSE quotes render in ₹ with Indian digit
+grouping. Data persists in `advisor.db`.
 
 ## API
 

@@ -37,8 +37,9 @@ Develop the capability to build conversational AI from first principles, without
 
 - [`financial-news-advisor/`](financial-news-advisor/) — a site that crawls
   financial news in real time and recommends portfolio updates with a degree
-  of recommendation and a target price. From-scratch RSS parsing and
-  sentiment analysis (no ML libraries), FastAPI backend, live dashboard.
+  of recommendation and a target price. Focused on Indian markets (NSE/BSE)
+  plus US stocks reachable via LRS. From-scratch RSS parsing and sentiment
+  analysis (no ML libraries), FastAPI backend, live dashboard.
 
 ## Progress Log
 

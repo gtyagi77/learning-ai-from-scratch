@@ -11,13 +11,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_validator
 
-from . import config, crawler, database, recommender
+from . import config, crawler, database, recommender, tickers
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
-_TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z.\-]{0,9}$")
+# Accepts NSE/BSE Yahoo symbols (RELIANCE.NS, M&M.NS, BAJAJ-AUTO.NS,
+# 500325.BO) as well as plain US symbols (AAPL, BRK-B).
+_TICKER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9&.\-]{0,19}$")
 
 
 @asynccontextmanager
@@ -46,7 +48,9 @@ class HoldingIn(BaseModel):
         v = v.strip().upper()
         if not _TICKER_RE.match(v):
             raise ValueError("invalid ticker symbol")
-        return v
+        # "RELIANCE" -> "RELIANCE.NS" for known NSE names, so users can
+        # type the symbol the way Indian brokers display it.
+        return tickers.resolve_symbol(v)
 
 
 @app.get("/")
@@ -105,7 +109,7 @@ def recommendations():
 def recommendation(ticker: str):
     if not _TICKER_RE.match(ticker.strip()):
         raise HTTPException(status_code=400, detail="invalid ticker symbol")
-    return recommender.recommend_for_ticker(ticker.strip().upper())
+    return recommender.recommend_for_ticker(tickers.resolve_symbol(ticker.strip()))
 
 
 @app.post("/api/crawl")

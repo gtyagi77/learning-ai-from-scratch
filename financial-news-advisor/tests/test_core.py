@@ -98,6 +98,34 @@ def test_ambiguous_symbol_not_matched_bare():
     assert found == []
 
 
+def test_extract_indian_company_names():
+    text = "Reliance Industries and Infosys lead Nifty rally; HDFC Bank lags"
+    found = tickers.extract_tickers(text, [], {})
+    assert {"RELIANCE.NS", "INFY.NS", "HDFCBANK.NS"} <= set(found)
+
+
+def test_extract_nse_notation_resolves_to_ns():
+    found = tickers.extract_tickers("Tata Consultancy Services (NSE: TCS) wins deal", [], {})
+    assert "TCS.NS" in found
+
+
+def test_parenthesised_word_is_not_a_ticker():
+    assert tickers.extract_tickers("The company filed for an offering (IPO)", [], {}) == []
+
+
+def test_universe_bare_match_uses_base_symbol():
+    found = tickers.extract_tickers("TATAMOTORS hits 52-week high", ["TATAMOTORS.NS"], {})
+    assert "TATAMOTORS.NS" in found
+
+
+def test_resolve_symbol():
+    assert tickers.resolve_symbol("reliance") == "RELIANCE.NS"
+    assert tickers.resolve_symbol("TCS") == "TCS.NS"
+    assert tickers.resolve_symbol("AAPL") == "AAPL"          # US passes through
+    assert tickers.resolve_symbol("RELIANCE.NS") == "RELIANCE.NS"
+    assert tickers.resolve_symbol("500325.BO") == "500325.BO"  # BSE code untouched
+
+
 # ---------- database + recommender ----------
 
 def test_article_roundtrip_and_recommendation():
