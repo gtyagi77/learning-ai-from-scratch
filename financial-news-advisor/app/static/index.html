@@ -172,11 +172,16 @@
     <button id="refresh-btn" class="ghost">Crawl now</button>
   </div>
   <p class="status-line" id="action-line"></p>
-  <p class="status-line">Rating logic: average news sentiment over 48h, newer
-    headlines weighted more · signal ≥ +0.35 <strong>STRONG BUY</strong> ·
-    ≥ +0.12 <strong>BUY</strong> · −0.12…+0.12 <strong>HOLD</strong> ·
-    ≤ −0.12 <strong>SELL</strong> · ≤ −0.35 <strong>STRONG SELL</strong>.
-    Upside/downside = signal × 10% max move, scaled by confidence.</p>
+  <p class="status-line">Rating = <strong>60% valuation</strong> (P/E vs
+    sector, analyst mean target, gap to 200-day average, 52-week range
+    position) + <strong>40% news sentiment</strong> (48h, headline-specific
+    articles weighted fully, passing mentions 0.35×, multi-stock roundups
+    0.3×). Combined signal ≥ +0.35 <strong>STRONG BUY</strong> · ≥ +0.12
+    <strong>BUY</strong> · −0.12…+0.12 <strong>HOLD</strong> · ≤ −0.12
+    <strong>SELL</strong> · ≤ −0.35 <strong>STRONG SELL</strong>. Without
+    valuation data, ratings are news-only and capped at BUY/SELL. Targets are
+    valuation-anchored (analyst consensus + sector-P/E fair value) when
+    available.</p>
   <div class="cards" id="cards"></div>
 
   <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
@@ -274,7 +279,7 @@ function card(r) {
     <div class="price-row">
       <div class="stat"><div class="lbl">Current</div>
         <div class="val">${fmtMoney(r.current_price, r.currency)}</div>${chg}${noQuote}</div>
-      <div class="stat"><div class="lbl">48h target (news-implied)</div>
+      <div class="stat"><div class="lbl">Target (${esc(r.target_basis || "news-implied")})</div>
         <div class="val">${fmtMoney(r.target_price, r.currency)}</div>
         ${moveLabel(r.implied_move_pct, "sub")}</div>
     </div>
@@ -283,8 +288,11 @@ function card(r) {
       <div class="meter"><span style="width:${pct}%"></span></div>
       <span><strong>${esc(r.degree)}</strong> (${pct}%)</span>
     </div>
-    <div class="meter-row"><span>News signal: <strong>${r.signal >= 0 ? "+" : ""}${(r.signal ?? 0).toFixed(2)}</strong>
-      (${esc(r.signal_label)}, ${r.news_count} article${r.news_count === 1 ? "" : "s"} in window)</span></div>
+    <div class="meter-row"><span>
+      Valuation <strong>${r.valuation_score == null ? "n/a" : (r.valuation_score >= 0 ? "+" : "") + r.valuation_score.toFixed(2)}</strong>
+      · News <strong>${r.news_signal >= 0 ? "+" : ""}${(r.news_signal ?? 0).toFixed(2)}</strong>
+      (${r.news_specific_count ?? 0}/${r.news_count} headline-specific)
+      → combined <strong>${r.signal >= 0 ? "+" : ""}${(r.signal ?? 0).toFixed(2)}</strong></span></div>
     ${heads ? `<ul class="headlines">${heads}</ul>` : `<p class="empty">No recent news mentioning this ticker yet.</p>`}
   </div>`;
 }

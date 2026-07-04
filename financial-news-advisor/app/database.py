@@ -28,7 +28,8 @@ def init(db_path: Optional[str] = None) -> None:
                 published_ts REAL,
                 fetched_ts REAL NOT NULL,
                 sentiment REAL NOT NULL,
-                tickers TEXT NOT NULL DEFAULT '[]'
+                tickers TEXT NOT NULL DEFAULT '[]',
+                title_tickers TEXT NOT NULL DEFAULT '[]'
             );
             CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_ts);
             CREATE TABLE IF NOT EXISTS portfolio (
@@ -40,20 +41,31 @@ def init(db_path: Optional[str] = None) -> None:
             );
             """
         )
+        # Migration for databases created before title_tickers existed.
+        cols = {row[1] for row in _conn.execute("PRAGMA table_info(articles)")}
+        if "title_tickers" not in cols:
+            _conn.execute(
+                "ALTER TABLE articles ADD COLUMN title_tickers TEXT NOT NULL DEFAULT '[]'"
+            )
         _conn.commit()
 
 
 def insert_article(source: str, title: str, link: str, summary: str,
                    published_ts: Optional[float], sentiment: float,
-                   tickers: List[str]) -> bool:
-    """Insert an article; returns False if the link was already stored."""
+                   tickers: List[str],
+                   title_tickers: Optional[List[str]] = None) -> bool:
+    """Insert an article; returns False if the link was already stored.
+
+    title_tickers: the subset of tickers mentioned in the headline itself —
+    used to weight headline-specific coverage above passing mentions."""
     with _lock:
         try:
             _conn.execute(
                 "INSERT INTO articles (source, title, link, summary, published_ts,"
-                " fetched_ts, sentiment, tickers) VALUES (?,?,?,?,?,?,?,?)",
+                " fetched_ts, sentiment, tickers, title_tickers)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
                 (source, title, link, summary, published_ts, time.time(),
-                 sentiment, json.dumps(tickers)),
+                 sentiment, json.dumps(tickers), json.dumps(title_tickers or [])),
             )
             _conn.commit()
             return True
@@ -89,6 +101,7 @@ def recent_articles(limit: int = 50, ticker: Optional[str] = None,
 def _article_dict(row: sqlite3.Row) -> Dict:
     d = dict(row)
     d["tickers"] = json.loads(d["tickers"])
+    d["title_tickers"] = json.loads(d.get("title_tickers") or "[]")
     return d
 
 

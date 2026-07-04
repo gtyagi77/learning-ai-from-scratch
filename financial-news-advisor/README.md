@@ -90,17 +90,26 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
    signal strength, per sector, and any of them can be added to the
    portfolio with one click. Index membership changes over time — the lists
    are plain data in `universe.py`, edit them there.
-5. **Recommender** (`app/recommender.py`) combines the last 48 h of articles
-   per ticker with exponential recency decay (12 h half-life) into one signal,
-   then:
-   - **Action**: signal ≥ 0.35 → STRONG BUY, ≥ 0.12 → BUY, ≤ -0.12 → SELL,
-     ≤ -0.35 → STRONG SELL, otherwise HOLD.
+5. **Recommender** (`app/recommender.py`) — ratings are **valuation-led**,
+   not momentum-led; "the stock surged" alone never produces a STRONG BUY.
+   - **Valuation score** (60% weight, `app/fundamentals.py`): trailing/
+     forward P/E vs a sector baseline (editable in `universe.SECTOR_PE`),
+     analyst mean target vs price, gap to the 200-day average (stretched =
+     negative), and position in the 52-week range. Components that can't be
+     fetched simply drop out.
+   - **News signal** (40% weight): recency-decayed (12 h half-life) average
+     sentiment of *specific* coverage — headline mentions count fully,
+     passing mentions 0.35×, multi-stock roundups 0.3×.
+   - **Action**: combined signal ≥ 0.35 → STRONG BUY, ≥ 0.12 → BUY,
+     ≤ -0.12 → SELL, ≤ -0.35 → STRONG SELL, else HOLD. When no valuation
+     data resolves, the rating is news-only and **capped at BUY/SELL**.
+   - **Target price**: valuation-anchored when possible — a blend of the
+     analyst mean target (60%) and a sector-P/E fair value (40%), nudged
+     ±3% max by news sentiment. Falls back to a signal-implied move off the
+     live quote only when neither exists.
    - **Degree of recommendation**: confidence in [0, 1] blending news volume,
-     agreement between articles, and signal conviction (shown as
-     low / moderate / high).
-   - **Target price**: `current × (1 + signal × 10% × (0.4 + 0.6 × confidence))`
-     — i.e. maximally positive, high-confidence news implies ≈ +10% over the
-     short horizon. Live quotes come from Yahoo Finance's public chart API.
+     agreement between articles, conviction, and whether valuation data was
+     available (low / moderate / high).
 
 ## Run it
 

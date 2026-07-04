@@ -154,3 +154,27 @@ for _members in SECTORS.values():
 
 def watch_symbols() -> List[str]:
     return list(WATCHLIST.keys())
+
+
+# Rough sector-average trailing P/E baselines for the valuation score —
+# a stock trading well below its sector's typical multiple scores as cheap,
+# well above as expensive. Deliberately coarse; edit as market levels shift.
+SECTOR_PE: Dict[str, float] = {
+    "AI & IT": 26.0,
+    "Data Centers & Digital Infra": 30.0,
+    "Energy & Power": 14.0,
+    "Defence": 38.0,
+}
+DEFAULT_MARKET_PE = 22.0  # ~Nifty 50 long-run average
+
+
+def sector_pe_for(symbol: str) -> float:
+    """Sector P/E baseline for a symbol: its first thematic basket's value,
+    else the broad-market average."""
+    symbol = symbol.upper()
+    for sector, members in SECTORS.items():
+        if sector == "Nifty 50":
+            continue
+        if any(sym == symbol for sym, _ in members):
+            return SECTOR_PE.get(sector, DEFAULT_MARKET_PE)
+    return DEFAULT_MARKET_PE

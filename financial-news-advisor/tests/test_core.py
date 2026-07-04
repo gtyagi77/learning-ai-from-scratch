@@ -144,6 +144,14 @@ def test_universe_bare_match_uses_base_symbol():
     assert "TATAMOTORS.NS" in found
 
 
+def test_acronym_tickers_match_uppercase_only():
+    # "HAL" all-caps is the company; "Hal" titlecase (a person) is not.
+    assert "HAL.NS" in tickers.extract_tickers(
+        "HAL wins fighter jet order", ["HAL.NS"], {})
+    assert tickers.extract_tickers(
+        "Director Hal Smith joins the board", ["HAL.NS"], {}) == []
+
+
 def test_resolve_symbol():
     assert tickers.resolve_symbol("reliance") == "RELIANCE.NS"
     assert tickers.resolve_symbol("TCS") == "TCS.NS"
@@ -322,6 +330,134 @@ def test_implied_move_without_quote(monkeypatch):
     assert rec["implied_move_pct"] is not None and rec["implied_move_pct"] > 0
     assert "STRONG BUY" in rec["rationale"] or "BUY" in rec["rationale"]
     assert "+0." in rec["rationale"]  # the signal value is shown
+
+
+RICH_FUNDA = {
+    "price": 100.0, "currency": "INR", "high52": 120.0, "low52": 70.0,
+    "pos52": 0.6, "dma200": 95.0, "dma_gap_pct": 5.26,
+    "trailing_pe": 15.0, "forward_pe": None, "target_mean": 115.0,
+}
+
+EXPENSIVE_FUNDA = {
+    "price": 100.0, "currency": "INR", "high52": 102.0, "low52": 55.0,
+    "pos52": 0.96, "dma200": 78.0, "dma_gap_pct": 28.0,
+    "trailing_pe": 44.0, "forward_pe": None, "target_mean": None,
+}
+
+
+def test_valuation_score_components():
+    from app import recommender
+
+    score, notes, fair = recommender.valuation_score(RICH_FUNDA, sector_pe=22.0)
+    # P/E 15 vs 22 is cheap and analyst target +15%, partly offset by the
+    # mildly stretched price components — modestly positive overall.
+    assert score is not None and 0.1 < score < 0.5
+    assert any("P/E 15.0" in n for n in notes)
+    assert any("analyst mean target" in n for n in notes)
+    assert fair is not None and 100.0 < fair <= 140.0
+
+    score2, notes2, _ = recommender.valuation_score(EXPENSIVE_FUNDA, sector_pe=22.0)
+    # P/E double the sector, 28% above 200-DMA, at 52w high — negative.
+    assert score2 is not None and score2 < -0.4
+
+    assert recommender.valuation_score(None, 22.0) == (None, [], None)
+
+
+def test_overvalued_stock_with_positive_news_is_not_a_buy(monkeypatch):
+    """The user's core complaint: 'stock surged' news alone must not produce
+    a buy when the valuation says expensive."""
+    from app import fundamentals, prices, recommender
+
+    now = time.time()
+    database.insert_article(
+        "Test", "Vertex Corp surges to record high on blowout earnings",
+        "https://example.com/vx1", "Stellar quarter.", now - 600, 0.85,
+        ["VERTEX"], ["VERTEX"],
+    )
+    monkeypatch.setattr(fundamentals, "get_fundamentals",
+                        lambda s: dict(EXPENSIVE_FUNDA))
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    rec = recommender.recommend_for_ticker("VERTEX")
+    assert rec["news_signal"] > 0.5          # the news is glowing...
+    assert rec["valuation_score"] < -0.4     # ...but the stock is expensive
+    assert rec["action"] in ("HOLD", "SELL", "STRONG SELL")
+    assert "Valuation" in rec["rationale"]
+
+
+def test_undervalued_stock_gets_valuation_anchored_target(monkeypatch):
+    from app import fundamentals, prices, recommender
+
+    now = time.time()
+    database.insert_article(
+        "Test", "Basalt Ltd wins record contract, upgraded by analysts",
+        "https://example.com/bs1", "Strong order book.", now - 600, 0.7,
+        ["BASALT"], ["BASALT"],
+    )
+    monkeypatch.setattr(fundamentals, "get_fundamentals",
+                        lambda s: dict(RICH_FUNDA))
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    rec = recommender.recommend_for_ticker("BASALT")
+    assert rec["action"] in ("BUY", "STRONG BUY")
+    assert rec["target_basis"] == "valuation-anchored"
+    # Fair value blends analyst target (115) and P/E fair value — above price.
+    assert rec["target_price"] > 100.0
+    assert rec["fair_value"] is not None
+
+
+def test_rating_never_contradicts_its_own_target(monkeypatch):
+    """Glowing news + expensive stock whose analyst target sits BELOW the
+    price: must not say BUY while the target implies a loss."""
+    from app import fundamentals, prices, recommender
+
+    funda = dict(EXPENSIVE_FUNDA, target_mean=94.0)  # target below price=100
+    now = time.time()
+    database.insert_article(
+        "Test", "Peak Ltd soars to record on stellar blowout results",
+        "https://example.com/pk1", "Impressive quarter.", now - 600, 0.9,
+        ["PEAK"], ["PEAK"],
+    )
+    monkeypatch.setattr(fundamentals, "get_fundamentals", lambda s: funda)
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    rec = recommender.recommend_for_ticker("PEAK")
+    assert rec["implied_move_pct"] < 0
+    assert "BUY" not in rec["action"]
+
+
+def test_news_only_rating_is_capped(monkeypatch):
+    from app import prices, recommender
+
+    now = time.time()
+    for i in range(3):
+        database.insert_article(
+            "Test", f"Cinder Ltd surges on blowout record earnings beat {i}",
+            f"https://example.com/cd{i}", "Stellar.", now - 600 - i, 0.9,
+            ["CINDER"], ["CINDER"],
+        )
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    rec = recommender.recommend_for_ticker("CINDER")  # fundamentals stubbed None
+    assert rec["signal"] >= 0.35                      # would be STRONG BUY...
+    assert rec["action"] == "BUY"                     # ...but capped news-only
+    assert "capped" in rec["rationale"]
+
+
+def test_specific_news_outweighs_passing_mentions():
+    from app import recommender
+
+    now = time.time()
+    # Headline-specific positive article.
+    database.insert_article(
+        "Test", "Quartz Ltd surges on record profit", "https://example.com/qz1",
+        "", now - 600, 0.8, ["QUARTZ"], ["QUARTZ"],
+    )
+    # Negative multi-stock roundup that only mentions it in passing.
+    database.insert_article(
+        "Test", "Markets slump: five stocks that plunged this week",
+        "https://example.com/qz2", "Quartz among decliners.", now - 600, -0.8,
+        ["QUARTZ", "AAA", "BBB", "CCC", "DDD"], [],
+    )
+    rec = recommender.recommend_for_ticker("QUARTZ")
+    # Equal magnitudes, but the specific headline dominates the roundup.
+    assert rec["news_signal"] > 0.5
 
 
 def test_instrument_map_builders():

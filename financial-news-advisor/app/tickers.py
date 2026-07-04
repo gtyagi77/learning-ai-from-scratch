@@ -227,8 +227,12 @@ INDIAN_BASES: Dict[str, str] = {
     if sym.endswith(".NS")
 }
 
-# Symbols that collide with everyday English words; only matched via
-# cashtags ($F) or company names, never as bare uppercase words.
+# Symbols that collide with everyday English words or common all-caps
+# usages; only matched via cashtags ($F) or company names, never as bare
+# uppercase words. Note the bare-word match is case-sensitive, so pure
+# acronym tickers (HAL, BEL, GAIL, PNB, DLF, MRF, SAIL, TRENT) are safe to
+# match — "HAL" in a headline is the company, "Hal" the person would not
+# match — and are deliberately NOT listed here.
 AMBIGUOUS_SYMBOLS: Set[str] = {
     "A", "ALL", "AN", "ANY", "ARE", "AT", "BE", "BIG", "BY", "CAN", "CEO",
     "DAY", "DO", "EPS", "ETF", "EU", "FOR", "GDP", "GO", "HAS", "HE", "IPO",
@@ -236,8 +240,7 @@ AMBIGUOUS_SYMBOLS: Set[str] = {
     "OR", "OUT", "PM", "REAL", "SEE", "SHE", "SO", "TECH", "THE", "TOP",
     "TWO", "UK", "UP", "US", "USA", "WELL", "WHO", "YOU", "C", "F", "GS",
     "MA", "MS", "T", "V", "DE", "GE", "GM", "HD", "KO", "PG", "LT", "IDEA",
-    "SAIL", "TRENT", "MRF", "BEL", "HAL", "GAIL", "PNB", "DLF", "OIL",
-    "PARAS", "E2E",
+    "OIL", "PARAS", "E2E",
 }
 
 # Phrases that contain a company alias but are a *different* entity — mostly
