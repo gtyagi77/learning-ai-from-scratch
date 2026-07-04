@@ -381,7 +381,7 @@ def test_overvalued_stock_with_positive_news_is_not_a_buy(monkeypatch):
     assert rec["news_signal"] > 0.5          # the news is glowing...
     assert rec["valuation_score"] < -0.4     # ...but the stock is expensive
     assert rec["action"] in ("HOLD", "SELL", "STRONG SELL")
-    assert "Valuation" in rec["rationale"]
+    assert "Value" in rec["rationale"]
 
 
 def test_undervalued_stock_gets_valuation_anchored_target(monkeypatch):

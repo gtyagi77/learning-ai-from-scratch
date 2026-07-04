@@ -21,6 +21,7 @@
     --critical: #d03b3b;
     --critical-text: #b32020;
     --neutral-chip: #f0efec;
+    --series2: #1baf7a;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -39,6 +40,7 @@
       --critical: #d03b3b;
       --critical-text: #e66767;
       --neutral-chip: #383835;
+      --series2: #199e70;
     }
   }
   * { box-sizing: border-box; }
@@ -120,6 +122,51 @@
   .chip.pos { color: var(--good-text); }
   .chip.neg { color: var(--critical-text); }
   .empty { color: var(--muted); font-size: 13px; }
+  /* --- macro strip --- */
+  .macro-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .macro-tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 11px 13px; display: flex; flex-direction: column; gap: 5px;
+  }
+  .macro-tile .mt-name { font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--muted); }
+  .macro-tile .mt-level { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .macro-tile .mt-label { font-size: 12px; color: var(--ink-2); }
+  .tilt-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  /* --- horizons table --- */
+  table.hz { border-collapse: collapse; font-size: 12px; width: 100%; }
+  table.hz th { text-align: left; color: var(--muted); font-weight: 600; padding: 2px 8px 2px 0; }
+  table.hz td { padding: 2px 8px 2px 0; color: var(--ink-2); border-top: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums; }
+  table.hz td:first-child { color: var(--ink); font-weight: 600; }
+  .strategy { font-size: 12px; color: var(--ink-2); background: var(--neutral-chip);
+    border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
+  .strategy b { color: var(--ink); }
+  /* --- detail modal --- */
+  .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50;
+    display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 4vh 16px; }
+  .modal-back[hidden] { display: none; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    max-width: 720px; width: 100%; padding: 20px; position: relative; }
+  .modal-close { position: absolute; top: 10px; right: 12px; background: none; border: 0;
+    color: var(--muted); font-size: 18px; cursor: pointer; }
+  .modal h3 { margin: 0 0 4px; font-size: 18px; display:flex; gap:10px; align-items:center; }
+  .modal h4 { margin: 18px 0 6px; font-size: 13px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .05em; }
+  .chart-wrap { overflow-x: auto; }
+  .chart-legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--ink-2); margin-top: 4px; }
+  .chart-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+    margin-right: 5px; vertical-align: -1px; }
+  .ratio-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px; font-size: 12.5px; }
+  .ratio-grid .rg { background: var(--neutral-chip); border-radius: 7px; padding: 7px 9px; }
+  .ratio-grid .rg b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12.5px; }
+  .pros-cons ul { margin: 4px 0 0; padding-left: 18px; color: var(--ink-2); }
+  select.profile-sel {
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; font: inherit; font-size: 14px;
+  }
   /* --- market scan --- */
   .sector { margin-bottom: 18px; }
   .sector h3 { font-size: 14px; margin: 14px 0 6px; }
@@ -164,24 +211,34 @@
     investment advice.
   </div>
 
+  <h2>Macro environment</h2>
+  <div class="macro-strip" id="macro"></div>
+  <div class="tilt-chips" id="tilts"></div>
+
   <h2>Portfolio</h2>
   <div class="add-row">
     <input id="ticker-input" placeholder="Ticker (RELIANCE.NS)" maxlength="20">
     <input id="name-input" placeholder="Company name (optional)">
     <button id="add-btn">Add to portfolio</button>
     <button id="refresh-btn" class="ghost">Crawl now</button>
+    <select id="profile" class="profile-sel" title="Risk profile shifts component weights">
+      <option value="balanced">Balanced</option>
+      <option value="conservative">Conservative</option>
+      <option value="aggressive">Aggressive</option>
+    </select>
   </div>
   <p class="status-line" id="action-line"></p>
-  <p class="status-line">Rating = <strong>60% valuation</strong> (P/E vs
-    sector, analyst mean target, gap to 200-day average, 52-week range
-    position) + <strong>40% news sentiment</strong> (48h, headline-specific
-    articles weighted fully, passing mentions 0.35×, multi-stock roundups
-    0.3×). Combined signal ≥ +0.35 <strong>STRONG BUY</strong> · ≥ +0.12
-    <strong>BUY</strong> · −0.12…+0.12 <strong>HOLD</strong> · ≤ −0.12
-    <strong>SELL</strong> · ≤ −0.35 <strong>STRONG SELL</strong>. Without
-    valuation data, ratings are news-only and capped at BUY/SELL. Targets are
-    valuation-anchored (analyst consensus + sector-P/E fair value) when
-    available.</p>
+  <p class="status-line">Rating blends <strong>Value</strong> (P/E vs sector,
+    analyst targets &amp; street consensus), <strong>Quality</strong> (ROE,
+    debt/equity, revenue &amp; profit growth, margins), <strong>News</strong>
+    (48h, headline-specific weighted) and <strong>Macro</strong> (sector
+    sensitivity to Nifty trend, USD/INR, Brent, India VIX) — weights set by
+    your risk profile (balanced: 35/25/25/15). Combined signal ≥ +0.35
+    <strong>STRONG BUY</strong> · ≥ +0.12 <strong>BUY</strong> · −0.12…+0.12
+    <strong>HOLD</strong> · ≤ −0.12 <strong>SELL</strong> · ≤ −0.35
+    <strong>STRONG SELL</strong>. STRONG needs both value and quality data;
+    news-only ratings are capped at BUY/SELL; a rating never contradicts its
+    own target. Click any ticker for financial history and charts.</p>
   <div class="cards" id="cards"></div>
 
   <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
@@ -204,8 +261,16 @@
   </footer>
 </div>
 
+<div class="modal-back" id="modal" hidden>
+  <div class="modal">
+    <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+    <div id="modal-body"><p class="empty">Loading…</p></div>
+  </div>
+</div>
+
 <script>
 const $ = (id) => document.getElementById(id);
+const profileSel = () => localStorage.getItem("riskProfile") || "balanced";
 
 function esc(s) {
   const d = document.createElement("div");
@@ -256,6 +321,37 @@ function moveLabel(pct, cls) {
   return `<span class="${cls} ${pct >= 0.05 ? "up" : pct <= -0.05 ? "down" : ""}">${word}${num}</span>`;
 }
 
+function fmtComp(label, v) {
+  return v == null ? `${label} <span style="color:var(--muted)">n/a</span>`
+    : `${label} <strong>${v >= 0 ? "+" : ""}${v.toFixed(2)}</strong>`;
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function horizonsTable(r) {
+  if (!r.horizons || !r.horizons.length) return "";
+  const rows = r.horizons.map(h => `<tr>
+      <td>${esc(h.label)}</td><td>${fmtDate(h.date)}</td>
+      <td>${h.target_price != null ? fmtMoney(h.target_price, r.currency) : "—"}</td>
+      <td class="${(h.expected_return_pct ?? 0) >= 0 ? "up" : "down"}">${h.expected_return_pct != null ? (h.expected_return_pct >= 0 ? "+" : "") + h.expected_return_pct.toFixed(1) + "%" : "—"}</td>
+      <td style="color:var(--muted)">${esc(h.basis)}</td></tr>`).join("");
+  return `<table class="hz"><tr><th>Horizon</th><th>By date</th><th>Target</th><th>Return</th><th>Basis</th></tr>${rows}</table>`;
+}
+
+function strategyLine(r) {
+  const s = r.strategy;
+  if (!s) return "";
+  const bits = [`<b>Strategy</b> (${esc(s.profile)}): ${esc(s.entry)}`];
+  if (s.stop_loss) bits.push(`stop-loss ${fmtMoney(s.stop_loss, r.currency)}`);
+  if (s.book_profit_at) bits.push(`book profits near ${fmtMoney(s.book_profit_at, r.currency)}`);
+  bits.push(`position ≤ ${s.position_size_hint_pct}% of portfolio`);
+  bits.push(`review: ${s.review.map(esc).join("; ")}`);
+  return `<div class="strategy">${bits.join(" · ")}</div>`;
+}
+
 function card(r) {
   const sym = splitSymbol(r.ticker);
   const chg = r.change_pct == null ? "" :
@@ -269,7 +365,8 @@ function card(r) {
   ).join("");
   return `<div class="card">
     <div class="card-head">
-      <span class="tick">${esc(sym.base)}</span>
+      <span class="tick" style="cursor:pointer" title="Open financial history"
+        onclick="openDetail('${esc(r.ticker)}')">${esc(sym.base)}</span>
       <span class="exch">${sym.exch}</span>
       <span class="cname">${esc(r.name || "")}</span>
       <button class="remove" title="Remove ${esc(r.ticker)}" data-ticker="${esc(r.ticker)}">✕</button>
@@ -289,16 +386,133 @@ function card(r) {
       <span><strong>${esc(r.degree)}</strong> (${pct}%)</span>
     </div>
     <div class="meter-row"><span>
-      Valuation <strong>${r.valuation_score == null ? "n/a" : (r.valuation_score >= 0 ? "+" : "") + r.valuation_score.toFixed(2)}</strong>
-      · News <strong>${r.news_signal >= 0 ? "+" : ""}${(r.news_signal ?? 0).toFixed(2)}</strong>
-      (${r.news_specific_count ?? 0}/${r.news_count} headline-specific)
-      → combined <strong>${r.signal >= 0 ? "+" : ""}${(r.signal ?? 0).toFixed(2)}</strong></span></div>
+      ${fmtComp("Value", r.valuation_score)} · ${fmtComp("Quality", r.quality_score)}
+      · ${fmtComp("News", r.news_count ? r.news_signal : null)}
+      · ${fmtComp("Macro", r.macro_tilt)}
+      → <strong>${r.signal >= 0 ? "+" : ""}${(r.signal ?? 0).toFixed(2)}</strong></span></div>
+    ${horizonsTable(r)}
+    ${strategyLine(r)}
     ${heads ? `<ul class="headlines">${heads}</ul>` : `<p class="empty">No recent news mentioning this ticker yet.</p>`}
   </div>`;
 }
 
+async function loadMacro() {
+  const res = await fetch("/api/macro");
+  const data = await res.json();
+  const inds = data.indicators || {};
+  const order = ["nifty", "usdinr", "brent", "vix"];
+  const tiles = order.filter(k => inds[k]).map(k => {
+    const i = inds[k];
+    const chg = i.chg_3m_pct;
+    return `<div class="macro-tile">
+      <span class="mt-name">${esc(i.name)}</span>
+      <span class="mt-level">${i.level.toLocaleString("en-IN")}
+        <span class="${chg >= 0 ? "up" : "down"}" style="font-size:12px">${chg >= 0 ? "▲" : "▼"} ${Math.abs(chg).toFixed(1)}% 3m</span></span>
+      <span class="mt-label">${esc(i.label)}</span>
+    </div>`;
+  }).join("");
+  $("macro").innerHTML = tiles || `<p class="empty">Macro indicators unavailable (market data unreachable).</p>`;
+  const tilts = data.sector_tilts || {};
+  $("tilts").innerHTML = Object.entries(tilts)
+    .filter(([, v]) => v != null)
+    .map(([sec, v]) => `<span class="chip ${v >= 0.05 ? "pos" : v <= -0.05 ? "neg" : ""}">${esc(sec)} ${v >= 0 ? "+" : ""}${v.toFixed(2)}</span>`)
+    .join("");
+}
+
+// ---- inline SVG charts (single hue per series, thin marks, no libraries) ----
+function svgLine(hist) {
+  const closes = hist.closes || [];
+  if (closes.length < 10) return "";
+  const W = 660, H = 180, P = 6;
+  const all = closes.concat((hist.dma200 || []), (hist.dma50 || [])).filter(v => v != null);
+  const min = Math.min(...all), max = Math.max(...all);
+  const x = i => P + (W - 2 * P) * i / (closes.length - 1);
+  const y = v => H - P - (H - 2 * P) * (v - min) / (max - min || 1);
+  const path = arr => arr.map((v, i) => v == null ? "" : `${i && arr[i-1] != null ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const grid = [0.25, 0.5, 0.75].map(f =>
+    `<line x1="${P}" x2="${W-P}" y1="${(P + (H-2*P)*f).toFixed(1)}" y2="${(P + (H-2*P)*f).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`).join("");
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="1 year price chart">
+    ${grid}
+    ${hist.dma200 ? `<path d="${path(hist.dma200)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>` : ""}
+    ${hist.dma50 ? `<path d="${path(hist.dma50)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="2 3"/>` : ""}
+    <path d="${path(closes)}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <circle cx="${x(closes.length-1)}" cy="${y(closes[closes.length-1])}" r="3.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+    <text x="${P}" y="${y(max)+10}" font-size="10" fill="var(--muted)">${max.toLocaleString("en-IN")}</text>
+    <text x="${P}" y="${y(min)-4}" font-size="10" fill="var(--muted)">${min.toLocaleString("en-IN")}</text>
+  </svg>
+  <div class="chart-legend">
+    <span><span class="sw" style="background:var(--accent)"></span>Close</span>
+    <span><span class="sw" style="background:var(--muted);opacity:.7"></span>50-day avg (fine dash)</span>
+    <span><span class="sw" style="background:var(--muted)"></span>200-day avg (dash)</span>
+  </div></div>`;
+}
+
+function svgBars(seriesA, seriesB, nameA, nameB, unit) {
+  const n = Math.min(10, Math.max(seriesA?.length || 0, seriesB?.length || 0));
+  if (!n) return "";
+  const a = (seriesA || []).slice(-n), b = (seriesB || []).slice(-n);
+  const W = 660, H = 150, P = 6;
+  const all = a.concat(b).filter(v => v != null);
+  const max = Math.max(...all, 0), min = Math.min(...all, 0);
+  const y = v => P + (H - 2 * P) * (max - v) / (max - min || 1);
+  const zero = y(0);
+  const group = (W - 2 * P) / n;
+  const bw = Math.min(22, group / 2 - 3);
+  let bars = "";
+  for (let i = 0; i < n; i++) {
+    const gx = P + i * group + group / 2;
+    if (a[i] != null) bars += `<rect x="${(gx - bw - 1).toFixed(1)}" y="${Math.min(y(a[i]), zero).toFixed(1)}" width="${bw}" height="${Math.max(1, Math.abs(y(a[i]) - zero)).toFixed(1)}" rx="2" fill="var(--accent)"><title>${nameA} ${a[i].toLocaleString("en-IN")} ${unit}</title></rect>`;
+    if (b[i] != null) bars += `<rect x="${(gx + 1).toFixed(1)}" y="${Math.min(y(b[i]), zero).toFixed(1)}" width="${bw}" height="${Math.max(1, Math.abs(y(b[i]) - zero)).toFixed(1)}" rx="2" fill="var(--series2)"><title>${nameB} ${b[i].toLocaleString("en-IN")} ${unit}</title></rect>`;
+  }
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${nameA} and ${nameB} history">
+    <line x1="${P}" x2="${W-P}" y1="${zero.toFixed(1)}" y2="${zero.toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>
+    ${bars}</svg>
+  <div class="chart-legend">
+    <span><span class="sw" style="background:var(--accent)"></span>${nameA}</span>
+    <span><span class="sw" style="background:var(--series2)"></span>${nameB}</span>
+    <span style="color:var(--muted)">${unit}, oldest → latest</span>
+  </div></div>`;
+}
+
+async function openDetail(ticker) {
+  $("modal").hidden = false;
+  $("modal-body").innerHTML = `<p class="empty">Loading ${esc(ticker)}…</p>`;
+  try {
+    const res = await fetch(`/api/stock/${encodeURIComponent(ticker)}?profile=${profileSel()}`);
+    const d = await res.json();
+    const r = d.recommendation, fin = d.financials || {}, hist = d.history || {};
+    const sym = splitSymbol(r.ticker);
+    const ratios = [
+      ["Stock P/E", fin.stock_pe], ["ROE %", fin.roe_pct], ["ROCE %", fin.roce_pct],
+      ["Debt/Equity", fin.debt_to_equity], ["Book value ₹", fin.book_value],
+      ["Rev growth %/yr", fin.rev_cagr_3y_pct], ["Profit growth %/yr", fin.profit_cagr_3y_pct],
+    ].filter(([, v]) => v != null)
+     .map(([k, v]) => `<div class="rg">${esc(k)}<b>${typeof v === "number" ? v.toLocaleString("en-IN") : esc(String(v))}</b></div>`).join("");
+    const prosCons = (fin.pros?.length || fin.cons?.length) ? `
+      <div class="pros-cons">
+        <div><strong class="up">Pros</strong><ul>${(fin.pros || []).map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>
+        <div><strong class="down">Cons</strong><ul>${(fin.cons || []).map(c => `<li>${esc(c)}</li>`).join("")}</ul></div>
+      </div>` : "";
+    $("modal-body").innerHTML = `
+      <h3>${esc(sym.base)} <span class="exch">${sym.exch}</span>
+        <span class="cname">${esc(r.name || "")}</span> ${badgeFor(r.action)}</h3>
+      <div class="rationale">${esc(r.rationale)}</div>
+      ${hist.closes ? `<h4>Price — 1 year</h4>${svgLine(hist)}` : ""}
+      ${fin.annual?.sales ? `<h4>Annual revenue & net profit</h4>${svgBars(fin.annual.sales, fin.annual.net_profit, "Sales", "Net profit", "₹ Cr")}` : ""}
+      ${fin.quarterly?.sales ? `<h4>Quarterly trend</h4>${svgBars(fin.quarterly.sales, fin.quarterly.net_profit, "Sales", "Net profit", "₹ Cr")}` : ""}
+      ${ratios ? `<h4>Key ratios ${fin.source ? `(source: ${esc(fin.source)})` : ""}</h4><div class="ratio-grid">${ratios}</div>` : ""}
+      ${prosCons}
+      <h4>Plan</h4>
+      ${horizonsTable(r)}
+      ${strategyLine(r)}`;
+  } catch (e) {
+    $("modal-body").innerHTML = `<p class="empty">Could not load details: ${esc(e.message)}</p>`;
+  }
+}
+window.openDetail = openDetail;
+
 async function loadRecommendations() {
-  const res = await fetch("/api/recommendations");
+  const res = await fetch(`/api/recommendations?profile=${profileSel()}`);
   const data = await res.json();
   const recs = data.recommendations || [];
   $("cards").innerHTML = recs.length
@@ -342,7 +556,8 @@ function scanRow(r, inPortfolio) {
 }
 
 async function loadScan() {
-  const [scanRes, pfRes] = await Promise.all([fetch("/api/scan"), fetch("/api/portfolio")]);
+  const [scanRes, pfRes] = await Promise.all([
+    fetch(`/api/scan?profile=${profileSel()}`), fetch("/api/portfolio")]);
   const data = await scanRes.json();
   const inPortfolio = new Set(((await pfRes.json()).holdings || []).map(h => h.ticker));
   $("scan").innerHTML = (data.sectors || []).map(s => `
@@ -416,8 +631,17 @@ async function crawlNow() {
 }
 
 async function refreshAll() {
-  await Promise.allSettled([loadStatus(), loadRecommendations(), loadScan(), loadNews()]);
+  await Promise.allSettled([loadStatus(), loadMacro(), loadRecommendations(), loadScan(), loadNews()]);
 }
+
+$("profile").value = profileSel();
+$("profile").addEventListener("change", () => {
+  localStorage.setItem("riskProfile", $("profile").value);
+  refreshAll();
+});
+$("modal-close").addEventListener("click", () => { $("modal").hidden = true; });
+$("modal").addEventListener("click", (e) => { if (e.target === $("modal")) $("modal").hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").hidden = true; });
 
 $("add-btn").addEventListener("click", addTicker);
 $("ticker-input").addEventListener("keydown", e => { if (e.key === "Enter") addTicker(); });

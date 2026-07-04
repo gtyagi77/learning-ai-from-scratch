@@ -39,6 +39,12 @@ def init(db_path: Optional[str] = None) -> None:
                 cost_basis REAL,
                 added_ts REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS financials_cache (
+                ticker TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                fetched_ts REAL NOT NULL
+            );
             """
         )
         # Migration for databases created before title_tickers existed.
@@ -137,6 +143,30 @@ def remove_holding(ticker: str) -> bool:
         cur = _conn.execute("DELETE FROM portfolio WHERE ticker = ?", (ticker.upper(),))
         _conn.commit()
     return cur.rowcount > 0
+
+
+def get_cached_financials(ticker: str) -> Optional[Dict]:
+    with _lock:
+        row = _conn.execute(
+            "SELECT source, payload, fetched_ts FROM financials_cache WHERE ticker = ?",
+            (ticker.upper(),),
+        ).fetchone()
+    if not row:
+        return None
+    return {"source": row["source"], "payload": json.loads(row["payload"]),
+            "fetched_ts": row["fetched_ts"]}
+
+
+def put_cached_financials(ticker: str, source: str, payload: Dict) -> None:
+    with _lock:
+        _conn.execute(
+            "INSERT INTO financials_cache (ticker, source, payload, fetched_ts)"
+            " VALUES (?,?,?,?) ON CONFLICT(ticker) DO UPDATE SET"
+            " source=excluded.source, payload=excluded.payload,"
+            " fetched_ts=excluded.fetched_ts",
+            (ticker.upper(), source, json.dumps(payload), time.time()),
+        )
+        _conn.commit()
 
 
 def prune_articles(max_age_days: float = 14.0) -> None:

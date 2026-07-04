@@ -90,26 +90,35 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
    signal strength, per sector, and any of them can be added to the
    portfolio with one click. Index membership changes over time — the lists
    are plain data in `universe.py`, edit them there.
-5. **Recommender** (`app/recommender.py`) — ratings are **valuation-led**,
-   not momentum-led; "the stock surged" alone never produces a STRONG BUY.
-   - **Valuation score** (60% weight, `app/fundamentals.py`): trailing/
-     forward P/E vs a sector baseline (editable in `universe.SECTOR_PE`),
-     analyst mean target vs price, gap to the 200-day average (stretched =
-     negative), and position in the 52-week range. Components that can't be
-     fetched simply drop out.
-   - **News signal** (40% weight): recency-decayed (12 h half-life) average
-     sentiment of *specific* coverage — headline mentions count fully,
-     passing mentions 0.35×, multi-stock roundups 0.3×.
-   - **Action**: combined signal ≥ 0.35 → STRONG BUY, ≥ 0.12 → BUY,
-     ≤ -0.12 → SELL, ≤ -0.35 → STRONG SELL, else HOLD. When no valuation
-     data resolves, the rating is news-only and **capped at BUY/SELL**.
-   - **Target price**: valuation-anchored when possible — a blend of the
-     analyst mean target (60%) and a sector-P/E fair value (40%), nudged
-     ±3% max by news sentiment. Falls back to a signal-implied move off the
-     live quote only when neither exists.
-   - **Degree of recommendation**: confidence in [0, 1] blending news volume,
-     agreement between articles, conviction, and whether valuation data was
-     available (low / moderate / high).
+5. **Recommender** (`app/recommender.py`) — ratings blend four components,
+   weighted by your risk profile (balanced 35/25/25/15, conservative,
+   aggressive), renormalized over whatever data resolves:
+   - **Value**: trailing/forward P/E vs a sector baseline (editable in
+     `universe.SECTOR_PE`; screener's Stock P/E backfills Yahoo's gated
+     P/E), analyst mean target & range, street consensus rating, gap to the
+     200-day average, 52-week range position.
+   - **Quality** (`app/financials.py` + `app/screener.py`): ROE,
+     debt-to-equity (computed from the balance sheet; skipped for
+     banks/NBFCs), revenue & net-profit 3-year CAGR, operating-margin
+     trend, latest-quarter sales YoY. Primary source is **screener.in**
+     (public pages, 24h cache, ≥1.5s pacing, robots.txt honored) with Yahoo
+     fallback — see the ToS note in `app/screener.py`.
+   - **News**: recency-decayed (12h half-life) sentiment of *specific*
+     coverage — headline mentions 1.0, passing mentions 0.35×, roundups 0.3×.
+   - **Macro** (`app/macro.py`): sector-sensitivity tilt from the Nifty
+     trend, USD/INR, Brent crude and India VIX (weak rupee helps IT
+     exporters; crude up helps ONGC, hurts OMCs), share capped at 25%.
+   - **Guards**: STRONG ratings need both value and quality data; news-only
+     ratings are capped at BUY/SELL; a rating that contradicts its own
+     valuation-anchored target is moderated to HOLD.
+   - **Time frames**: every recommendation carries dated horizons — Short
+     (1 month, news momentum), Medium (3 months, valuation mean-reversion +
+     macro), Long (12 months, analyst target / growth) — plus a strategy
+     block: entry approach, stop-loss, profit-booking level, position-size
+     hint, review triggers.
+   - Per-stock detail view: 1-year price chart with 50/200-day averages,
+     ~10 years of revenue & net profit, quarterly trend, key ratios, and
+     screener's pros/cons.
 
 ## Run it
 
@@ -165,6 +174,8 @@ grouping. Data persists in `advisor.db`.
 | `GET /` | Dashboard |
 | `GET /api/recommendations` | Action + confidence + target price per holding |
 | `GET /api/scan` | Same signals across the whole watch universe, grouped by sector |
+| `GET /api/macro` | Macro indicators (Nifty, USD/INR, Brent, India VIX) + sector tilts |
+| `GET /api/stock/{ticker}` | Detail: recommendation, financial history, price history w/ DMAs |
 | `GET /api/recommendations/{ticker}` | Same for any single ticker |
 | `GET /api/news?ticker=&limit=` | Crawled articles with sentiment |
 | `GET /api/portfolio` / `POST /api/portfolio` / `DELETE /api/portfolio/{t}` | Manage holdings |

@@ -178,3 +178,49 @@ def sector_pe_for(symbol: str) -> float:
         if any(sym == symbol for sym, _ in members):
             return SECTOR_PE.get(sector, DEFAULT_MARKET_PE)
     return DEFAULT_MARKET_PE
+
+
+def sector_for(symbol: str) -> str:
+    """First thematic basket containing the symbol, else 'Nifty 50'."""
+    symbol = symbol.upper()
+    for sector, members in SECTORS.items():
+        if sector == "Nifty 50":
+            continue
+        if any(sym == symbol for sym, _ in members):
+            return sector
+    return "Nifty 50"
+
+
+# Banks/NBFCs/insurers: leverage is their business model, so the
+# debt-to-equity quality component is skipped for these symbols.
+FINANCIAL_SYMBOLS = {
+    "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "KOTAKBANK.NS", "AXISBANK.NS",
+    "INDUSINDBK.NS", "PNB.NS", "BANKBARODA.NS", "CANBK.NS", "UNIONBANK.NS",
+    "FEDERALBNK.NS", "YESBANK.NS", "IDFCFIRSTB.NS", "BAJFINANCE.NS",
+    "BAJAJFINSV.NS", "SHRIRAMFIN.NS", "MUTHOOTFIN.NS", "PFC.NS", "RECLTD.NS",
+    "IRFC.NS", "IREDA.NS", "LICI.NS", "HDFCLIFE.NS", "SBILIFE.NS",
+    "ICICIPRULI.NS", "JIOFIN.NS",
+}
+
+# Macro sensitivity: sector -> {indicator: weight}. Tilt contribution is
+# weight x indicator state, where states are: nifty (+ = uptrend),
+# usdinr (+ = rupee weakening), brent (+ = crude rising), vix (+ = fear
+# rising). E.g. IT exporters benefit from a weak rupee (+0.6 x usdinr);
+# the broad market suffers from it (FII outflows, import bill).
+MACRO_SENSITIVITY = {
+    "AI & IT":                     {"nifty": 0.4, "usdinr": 0.6, "brent": 0.0, "vix": -0.3},
+    "Data Centers & Digital Infra": {"nifty": 0.5, "usdinr": 0.2, "brent": -0.1, "vix": -0.3},
+    "Energy & Power":              {"nifty": 0.4, "usdinr": -0.2, "brent": -0.3, "vix": -0.3},
+    "Defence":                     {"nifty": 0.3, "usdinr": 0.0, "brent": -0.1, "vix": -0.2},
+    "Nifty 50":                    {"nifty": 0.6, "usdinr": -0.2, "brent": -0.2, "vix": -0.4},
+}
+
+# Per-symbol overrides where the sector-level sign is wrong: upstream
+# producers gain from rising crude; refiner-marketers lose.
+MACRO_SYMBOL_OVERRIDES = {
+    "ONGC.NS": {"brent": 0.6},
+    "OIL.NS": {"brent": 0.6},
+    "IOC.NS": {"brent": -0.5},
+    "BPCL.NS": {"brent": -0.5},
+    "HINDPETRO.NS": {"brent": -0.5},
+}

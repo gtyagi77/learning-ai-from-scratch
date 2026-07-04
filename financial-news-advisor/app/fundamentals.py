@@ -51,33 +51,65 @@ def get_fundamentals(symbol: str) -> Optional[Dict]:
     return data
 
 
-def _fetch(symbol: str) -> Optional[Dict]:
-    out: Dict = {}
-
+def get_history(symbol: str, range_: str = "1y") -> Optional[Dict]:
+    """Daily close history + moving averages, for stats and charting.
+    Returns {price, currency, timestamps, closes, dma50, dma200} or None."""
     try:
         resp = requests.get(
             _CHART_URL.format(symbol=symbol),
-            params={"range": "1y", "interval": "1d"},
+            params={"range": range_, "interval": "1d"},
             headers={"User-Agent": config.USER_AGENT},
             timeout=config.HTTP_TIMEOUT_SECONDS,
         )
         resp.raise_for_status()
         result = resp.json()["chart"]["result"][0]
         meta = result["meta"]
-        closes = [c for c in result["indicators"]["quote"][0]["close"] if c is not None]
-        price = meta.get("regularMarketPrice")
-        if price and len(closes) >= 60:
-            high52, low52 = max(closes), min(closes)
-            out["price"] = float(price)
-            out["currency"] = meta.get("currency", "INR")
-            out["high52"], out["low52"] = round(high52, 2), round(low52, 2)
-            out["pos52"] = round((price - low52) / (high52 - low52), 3) if high52 > low52 else None
-            window = closes[-200:]
-            dma = sum(window) / len(window)
-            out["dma200"] = round(dma, 2)
-            out["dma_gap_pct"] = round((price - dma) / dma * 100, 2)
+        raw_ts = result.get("timestamp") or []
+        raw_closes = result["indicators"]["quote"][0]["close"] or []
+        pairs = [(t, c) for t, c in zip(raw_ts, raw_closes) if c is not None]
+        if not pairs:
+            return None
+        timestamps = [p[0] for p in pairs]
+        closes = [round(float(p[1]), 2) for p in pairs]
+        price = meta.get("regularMarketPrice") or closes[-1]
+
+        def rolling(n: int):
+            if len(closes) < n // 2:
+                return None
+            out = []
+            for i in range(len(closes)):
+                window = closes[max(0, i - n + 1):i + 1]
+                out.append(round(sum(window) / len(window), 2))
+            return out
+
+        return {
+            "price": round(float(price), 2),
+            "currency": meta.get("currency", "INR"),
+            "timestamps": timestamps,
+            "closes": closes,
+            "dma50": rolling(50),
+            "dma200": rolling(200),
+        }
     except Exception as exc:
-        log.debug("chart fundamentals %s failed: %s", symbol, exc)
+        log.debug("history %s failed: %s", symbol, exc)
+        return None
+
+
+def _fetch(symbol: str) -> Optional[Dict]:
+    out: Dict = {}
+
+    hist = get_history(symbol)
+    if hist and len(hist["closes"]) >= 60:
+        closes, price = hist["closes"], hist["price"]
+        high52, low52 = max(closes), min(closes)
+        out["price"] = price
+        out["currency"] = hist["currency"]
+        out["high52"], out["low52"] = round(high52, 2), round(low52, 2)
+        out["pos52"] = round((price - low52) / (high52 - low52), 3) if high52 > low52 else None
+        window = closes[-200:]
+        dma = sum(window) / len(window)
+        out["dma200"] = round(dma, 2)
+        out["dma_gap_pct"] = round((price - dma) / dma * 100, 2)
 
     try:
         resp = requests.get(
@@ -99,6 +131,11 @@ def _fetch(symbol: str) -> Optional[Dict]:
         out["forward_pe"] = (raw("summaryDetail", "forwardPE")
                              or raw("defaultKeyStatistics", "forwardPE"))
         out["target_mean"] = raw("financialData", "targetMeanPrice")
+        out["target_high"] = raw("financialData", "targetHighPrice")
+        out["target_low"] = raw("financialData", "targetLowPrice")
+        # Street consensus: 1 = strong buy ... 5 = sell.
+        out["analyst_rating"] = raw("financialData", "recommendationMean")
+        out["analyst_count"] = raw("financialData", "numberOfAnalystOpinions")
     except Exception as exc:
         log.debug("quoteSummary %s failed: %s", symbol, exc)
 
