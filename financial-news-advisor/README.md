@@ -120,6 +120,33 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
      ~10 years of revenue & net profit, quarterly trend, key ratios, and
      screener's pros/cons.
 
+## Accounts, holdings & tax
+
+The site requires a login: register with email + password on first visit
+(the first account becomes admin; set `ALLOW_SIGNUP=0` afterwards to close
+registration). Each user has their own portfolio, holdings, risk profile and
+recommendations. Security: scrypt-hashed passwords, revocable server-side
+sessions in HttpOnly/SameSite cookies, per-IP login rate-limiting,
+same-origin checks on writes, and restrictive security headers.
+
+**Google sign-in (optional):** create an OAuth client at
+console.cloud.google.com → Credentials, set the redirect URI to
+`https://<your-host>/api/auth/google/callback`, then set
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `OAUTH_REDIRECT_BASE`
+env vars. The "Continue with Google" button appears automatically.
+
+**Holdings upload:** upload your broker CSV (Zerodha holdings or tradebook,
+Groww, Upstox) or the downloadable generic template
+(`symbol,quantity,buy_price,buy_date`). Tradebook uploads net buys/sells
+FIFO into surviving lots with accurate dates. The dashboard then shows
+per-position P&L and Indian capital-gains analysis: short/long-term split,
+tax if sold today (STCG 20% ≤ 1 year, LTCG 12.5% beyond with the ₹1.25 lakh
+per-FY exemption applied at portfolio level), days until lots turn
+long-term, and tax saved by waiting. **SELL calls are tax-moderated**: if
+waiting ≤ 60 days for LTCG saves more than the expected downside, the call
+becomes HOLD with a dated explanation. Not tax advice; grandfathering
+(pre-2018 purchases) is out of scope.
+
 ## Run it
 
 ```bash
@@ -156,8 +183,11 @@ button — add this to point at your fork:
 
 **Notes for the free tier:** the instance spins down after ~15 min idle, so
 the first hit after a pause takes ~30–60 s to wake (cold start). Data is
-stored in SQLite on the instance's local disk, which resets on redeploy — the
-crawler simply re-populates it. For real-time NSE quotes instead of delayed
+stored in SQLite on the instance's local disk, which resets on redeploy —
+news re-populates automatically, but **user accounts and uploaded holdings
+are wiped too**. For a real multi-user deployment attach a persistent disk
+(paid Render feature) and point `DB_PATH` at it, or re-register/re-upload
+after each deploy. For real-time NSE quotes instead of delayed
 Yahoo data, set `QUOTE_PROVIDER=upstox` (or `angelone`) plus the token env
 vars in the Render service settings. The same image runs on Railway, Fly.io,
 or Google Cloud Run — anything that runs a container and sets `$PORT`.

@@ -519,6 +519,14 @@ def recommend_portfolio(risk_profile: str = "balanced") -> List[Dict]:
     ]
 
 
+def recommend_portfolio_for_user(user_id: int,
+                                 risk_profile: str = "balanced") -> List[Dict]:
+    return [
+        recommend_for_ticker(h["ticker"], h.get("name"), risk_profile=risk_profile)
+        for h in database.get_portfolio(user_id)
+    ]
+
+
 def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced") -> List[Dict]:
     """Scan the watch universe; financials are cache-only here so a 100+
     symbol sweep never triggers a screener crawl."""

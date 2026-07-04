@@ -52,7 +52,7 @@ def test_full_pipeline(monkeypatch):
     monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
 
     database.init(":memory:")
-    database.upsert_holding("AAPL", "Apple")
+    database.upsert_holding("AAPL", "Apple")   # pre-auth rows (user_id 0)
     database.upsert_holding("TSLA", "Tesla")
 
     added = crawler.crawl_once()
@@ -61,7 +61,15 @@ def test_full_pipeline(monkeypatch):
     # Second crawl dedupes everything.
     assert crawler.crawl_once() == 0
 
-    client = TestClient(app, raise_server_exceptions=True)
+    # Data endpoints require a login.
+    anon = TestClient(app, raise_server_exceptions=True)
+    assert anon.get("/api/news").status_code == 401
+
+    from tests.conftest import make_authed_client
+    client = make_authed_client()
+    # First registered user adopts the pre-auth AAPL/TSLA portfolio rows.
+    tickers_now = {h["ticker"] for h in client.get("/api/portfolio").json()["holdings"]}
+    assert {"AAPL", "TSLA"} <= tickers_now
 
     news = client.get("/api/news").json()["articles"]
     assert len(news) == 3

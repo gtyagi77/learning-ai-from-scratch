@@ -156,10 +156,16 @@ def test_horizons_have_dates_and_targets(monkeypatch):
 
 
 def test_macro_and_stock_endpoints():
+    from tests.conftest import make_authed_client
+
+    client = make_authed_client()
+    # Unauthenticated requests are rejected.
     from fastapi.testclient import TestClient
     from app.main import app
+    anon = TestClient(app)
+    assert anon.get("/api/macro").status_code == 401
+    assert anon.get("/api/recommendations").status_code == 401
 
-    client = TestClient(app)
     m = client.get("/api/macro").json()
     assert "indicators" in m and "sector_tilts" in m
 
