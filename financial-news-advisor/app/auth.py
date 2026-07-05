@@ -152,11 +152,16 @@ def google_enabled() -> bool:
     return bool(config.GOOGLE_CLIENT_ID and config.GOOGLE_CLIENT_SECRET)
 
 
-def _redirect_uri() -> str:
-    return config.OAUTH_REDIRECT_BASE.rstrip("/") + "/api/auth/google/callback"
+def _redirect_uri(base: Optional[str] = None) -> str:
+    """base overrides config.OAUTH_REDIRECT_BASE — used to derive the
+    callback URL from the incoming request when the env var hasn't been
+    explicitly set, so Google sign-in works without extra configuration on
+    a freshly deployed single-domain host (see main._request_base)."""
+    root = (base or config.OAUTH_REDIRECT_BASE).rstrip("/")
+    return root + "/api/auth/google/callback"
 
 
-def google_auth_url() -> str:
+def google_auth_url(base: Optional[str] = None) -> str:
     state = secrets.token_urlsafe(24)
     now = time.time()
     with _oauth_lock:
@@ -167,7 +172,7 @@ def google_auth_url() -> str:
     params = urllib.parse.urlencode({
         "response_type": "code",
         "client_id": config.GOOGLE_CLIENT_ID,
-        "redirect_uri": _redirect_uri(),
+        "redirect_uri": _redirect_uri(base),
         "scope": "openid email profile",
         "state": state,
         "prompt": "select_account",
@@ -175,8 +180,11 @@ def google_auth_url() -> str:
     return f"{GOOGLE_AUTH_URL}?{params}"
 
 
-def google_callback(code: str, state: str) -> Tuple[Optional[Dict], Optional[str]]:
-    """Exchange the code, fetch userinfo, create/link the user."""
+def google_callback(code: str, state: str,
+                    base: Optional[str] = None) -> Tuple[Optional[Dict], Optional[str]]:
+    """Exchange the code, fetch userinfo, create/link the user. base must
+    match whatever redirect_uri google_auth_url() used for this same
+    request cycle (main.py derives it identically both times)."""
     with _oauth_lock:
         if state not in _oauth_states:
             return None, "invalid or expired sign-in state — try again"
@@ -186,7 +194,7 @@ def google_callback(code: str, state: str) -> Tuple[Optional[Dict], Optional[str
             "code": code,
             "client_id": config.GOOGLE_CLIENT_ID,
             "client_secret": config.GOOGLE_CLIENT_SECRET,
-            "redirect_uri": _redirect_uri(),
+            "redirect_uri": _redirect_uri(base),
             "grant_type": "authorization_code",
         }, timeout=config.HTTP_TIMEOUT_SECONDS)
         token_resp.raise_for_status()

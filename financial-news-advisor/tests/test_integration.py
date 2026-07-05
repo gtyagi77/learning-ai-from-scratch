@@ -71,13 +71,18 @@ def test_full_pipeline(monkeypatch):
     tickers_now = {h["ticker"] for h in client.get("/api/portfolio").json()["holdings"]}
     assert {"AAPL", "TSLA"} <= tickers_now
 
+    # Default view is relevant_only=True: the untagged "Fed leaves rates
+    # unchanged" macro piece is dropped, the two company-tagged ones stay.
     news = client.get("/api/news").json()["articles"]
-    assert len(news) == 3
+    assert len(news) == 2
     by_link = {a["link"]: a for a in news}
     assert "AAPL" in by_link["http://local.test/apple-1"]["tickers"]
     assert by_link["http://local.test/apple-1"]["sentiment"] > 0.2
     assert "TSLA" in by_link["http://local.test/tesla-1"]["tickers"]
     assert by_link["http://local.test/tesla-1"]["sentiment"] < -0.2
+
+    all_news = client.get("/api/news?relevant_only=false").json()["articles"]
+    assert len(all_news) == 3
 
     recs = client.get("/api/recommendations").json()["recommendations"]
     by_ticker = {r["ticker"]: r for r in recs}

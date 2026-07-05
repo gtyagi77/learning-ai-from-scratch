@@ -155,6 +155,27 @@ def test_horizons_have_dates_and_targets(monkeypatch):
     assert any("results" in r for r in strat["review"])
 
 
+def test_news_relevant_only_filters_untagged_articles():
+    from tests.conftest import make_authed_client
+
+    client = make_authed_client()
+    now = time.time()
+    database.insert_article("Test", "Sensex ends flat amid mixed global cues",
+                            "https://example.com/macro-x", "", now, 0.0, [], [])
+    database.insert_article("Test", "Widget Corp wins record order, shares surge",
+                            "https://example.com/tagged-x", "", now, 0.8,
+                            ["WIDGETCO"], ["WIDGETCO"])
+
+    default = client.get("/api/news?limit=50").json()["articles"]
+    links = {a["link"] for a in default}
+    assert "https://example.com/tagged-x" in links
+    assert "https://example.com/macro-x" not in links  # untagged, filtered by default
+
+    all_news = client.get("/api/news?limit=50&relevant_only=false").json()["articles"]
+    all_links = {a["link"] for a in all_news}
+    assert "https://example.com/macro-x" in all_links
+
+
 def test_macro_and_stock_endpoints():
     from tests.conftest import make_authed_client
 

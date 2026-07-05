@@ -149,6 +149,10 @@ INDIA_COMPANY_MAP: Dict[str, str] = {
     "oracle financial services": "OFSS.NS",
     "affle": "AFFLE.NS",
     "netweb": "NETWEB.NS",
+    "latentview": "LATENTVIEW.NS", "latentview analytics": "LATENTVIEW.NS",
+    "zensar": "ZENSARTECH.NS", "zensar technologies": "ZENSARTECH.NS",
+    "happiest minds": "HAPPSTMNDS.NS",
+    "tanla": "TANLA.NS", "tanla platforms": "TANLA.NS",
     # --- data centers & digital infrastructure ---
     "tata communications": "TATACOMM.NS",
     "indus towers": "INDUSTOWER.NS",

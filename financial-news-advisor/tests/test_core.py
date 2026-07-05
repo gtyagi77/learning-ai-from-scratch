@@ -516,8 +516,11 @@ def test_universe_is_well_formed():
     from app import universe
 
     assert len(universe.NIFTY_50) == 50
-    assert {"AI & IT", "Data Centers & Digital Infra", "Energy & Power",
-            "Defence", "Nifty 50"} == set(universe.SECTORS)
+    assert {"AI & Emerging Tech", "IT Services", "Data Centers & Digital Infra",
+            "Energy & Power", "Defence", "Nifty 50"} == set(universe.SECTORS)
+    # TCS/Infosys-style staffing majors must not be in the AI basket.
+    ai_symbols = {sym for sym, _ in universe.AI_AND_EMERGING_TECH}
+    assert not ({"TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS"} & ai_symbols)
     sym_re = _re.compile(r"^[A-Z0-9][A-Z0-9&\-]*\.NS$")
     for members in universe.SECTORS.values():
         for symbol, name in members:

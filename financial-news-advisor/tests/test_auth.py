@@ -124,6 +124,56 @@ def test_google_callback_stubbed(monkeypatch):
     assert err2 is None and user2["id"] == user["id"]
 
 
+def test_marker_cookie_set_on_login_and_cleared_on_logout():
+    from app.main import SEEN_COOKIE
+
+    client = TestClient(app)
+    email = "marker@test.local"
+    client.post("/api/auth/register", json={"email": email, "password": "password123"})
+    assert client.cookies.get(SEEN_COOKIE) == "1"
+    assert client.cookies.get(auth.SESSION_COOKIE)  # HttpOnly, but TestClient jar still sees it
+
+    client.post("/api/auth/logout")
+    assert client.cookies.get(SEEN_COOKIE) is None
+    assert client.cookies.get(auth.SESSION_COOKIE) is None
+
+
+def test_google_redirect_uri_derived_from_request(monkeypatch):
+    """Regression test: OAUTH_REDIRECT_BASE defaulting to localhost must not
+    break Google sign-in on a real deployment — the redirect_uri sent to
+    Google should match whatever host the browser actually used."""
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_SECRET", "csec")
+    assert config.OAUTH_REDIRECT_BASE == config.OAUTH_REDIRECT_BASE_DEFAULT
+
+    client = TestClient(app, follow_redirects=False)
+    resp = client.get("/api/auth/google", headers={"host": "myapp.onrender.com",
+                                                    "x-forwarded-proto": "https"})
+    assert resp.status_code == 302
+    location = resp.headers["location"]
+    assert "redirect_uri=https%3A%2F%2Fmyapp.onrender.com" in location
+    assert "127.0.0.1" not in location
+
+
+def test_google_error_query_param_shows_friendly_message(monkeypatch):
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_SECRET", "csec")
+    resp = TestClient(app, follow_redirects=False).get(
+        "/api/auth/google/callback", params={"error": "access_denied"})
+    assert resp.status_code == 302
+    assert "auth_error=access_denied" in resp.headers["location"]
+
+
+def test_origin_check_accepts_x_forwarded_host():
+    client = make_authed_client()
+    # Origin matches the proxy's original host (X-Forwarded-Host), not the
+    # internal Host header uvicorn sees behind the proxy — must be allowed.
+    r = client.post("/api/portfolio", json={"ticker": "INFY.NS"},
+                    headers={"Origin": "https://public.example",
+                            "X-Forwarded-Host": "public.example"})
+    assert r.status_code == 200
+
+
 def test_security_headers_present():
     client = TestClient(app)
     resp = client.get("/api/status")

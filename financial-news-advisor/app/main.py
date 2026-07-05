@@ -12,7 +12,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
@@ -52,8 +52,15 @@ async def security_middleware(request: Request, call_next):
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         origin = request.headers.get("origin")
         if origin:  # browsers send it; curl/scripts don't
-            host = urlparse(origin).netloc
-            if host and host != request.headers.get("host"):
+            origin_host = urlparse(origin).netloc
+            # Accept a match against either the Host header uvicorn sees or
+            # X-Forwarded-Host (the original hostname a reverse proxy — e.g.
+            # Render — sets when it forwards under a different internal
+            # Host), so a same-origin browser request is never wrongly
+            # rejected just because of the proxy hop.
+            candidates = {h for h in (request.headers.get("host"),
+                                      request.headers.get("x-forwarded-host")) if h}
+            if origin_host and candidates and origin_host not in candidates:
                 return PlainTextResponse("cross-origin request rejected",
                                          status_code=403)
     response = await call_next(request)
@@ -72,6 +79,18 @@ async def security_middleware(request: Request, call_next):
 # auth plumbing
 # --------------------------------------------------------------------------
 
+def _request_base(request: Request) -> str:
+    """Public base URL for OAuth redirects. Only falls back to deriving it
+    from the live request when OAUTH_REDIRECT_BASE was left at its localhost
+    default — an explicit env var always wins (needed behind unusual
+    proxies)."""
+    if config.OAUTH_REDIRECT_BASE != config.OAUTH_REDIRECT_BASE_DEFAULT:
+        return config.OAUTH_REDIRECT_BASE
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    return f"{proto}://{host}"
+
+
 def _cookie_secure(request: Request) -> bool:
     if config.COOKIE_SECURE in ("1", "true", "yes"):
         return True
@@ -82,11 +101,24 @@ def _cookie_secure(request: Request) -> bool:
     return proto == "https"
 
 
+SEEN_COOKIE = "advisor_seen"
+
+
 def _set_session_cookie(response: Response, request: Request, token: str) -> None:
-    response.set_cookie(
-        auth.SESSION_COOKIE, token,
-        max_age=int(config.SESSION_TTL_DAYS * 86400),
-        httponly=True, samesite="lax", secure=_cookie_secure(request), path="/")
+    max_age = int(config.SESSION_TTL_DAYS * 86400)
+    secure = _cookie_secure(request)
+    response.set_cookie(auth.SESSION_COOKIE, token, max_age=max_age,
+                        httponly=True, samesite="lax", secure=secure, path="/")
+    # Non-secret marker, readable by JS (unlike the HttpOnly session cookie)
+    # so the frontend can tell "had a session, server forgot it" (e.g. a
+    # free-tier restart wiped the database) apart from "never logged in".
+    response.set_cookie(SEEN_COOKIE, "1", max_age=max_age,
+                        httponly=False, samesite="lax", secure=secure, path="/")
+
+
+def _clear_session_cookies(response: Response) -> None:
+    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    response.delete_cookie(SEEN_COOKIE, path="/")
 
 
 def get_current_user(request: Request) -> Dict:
@@ -136,7 +168,7 @@ def login(body: LoginIn, request: Request, response: Response):
 @app.post("/api/auth/logout")
 def logout(request: Request, response: Response):
     auth.end_session(request.cookies.get(auth.SESSION_COOKIE))
-    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    _clear_session_cookies(response)
     return {"ok": True}
 
 
@@ -161,19 +193,21 @@ def set_profile(body: ProfileIn, user: Dict = Depends(get_current_user)):
 
 
 @app.get("/api/auth/google")
-def google_start():
+def google_start(request: Request):
     if not auth.google_enabled():
         raise HTTPException(status_code=404, detail="Google sign-in not configured")
-    return RedirectResponse(auth.google_auth_url(), status_code=302)
+    return RedirectResponse(auth.google_auth_url(_request_base(request)), status_code=302)
 
 
 @app.get("/api/auth/google/callback")
-def google_callback(request: Request, code: str = "", state: str = ""):
+def google_callback(request: Request, code: str = "", state: str = "", error: str = ""):
     if not auth.google_enabled():
         raise HTTPException(status_code=404, detail="Google sign-in not configured")
-    user, err = auth.google_callback(code, state)
+    if error:  # user declined consent, or Google-side error
+        return RedirectResponse(f"/?auth_error={quote(error)}", status_code=302)
+    user, err = auth.google_callback(code, state, _request_base(request))
     if err:
-        return RedirectResponse(f"/?auth_error={err}", status_code=302)
+        return RedirectResponse(f"/?auth_error={quote(err)}", status_code=302)
     response = RedirectResponse("/", status_code=302)
     _set_session_cookie(response, request, auth.start_session(user["id"]))
     return response
@@ -234,9 +268,16 @@ def _profile_for(user: Dict, override: Optional[str]) -> str:
 
 @app.get("/api/news")
 def news(ticker: Optional[str] = None, limit: int = 40,
-         user: Dict = Depends(get_current_user)):
+         relevant_only: bool = True, user: Dict = Depends(get_current_user)):
+    """relevant_only (default True) drops articles that don't mention any
+    tracked stock — general feeds pull in plenty of macro/economy pieces
+    that name no company at all, which read as noise in a per-stock feed."""
     limit = max(1, min(limit, 200))
-    return {"articles": database.recent_articles(limit=limit, ticker=ticker)}
+    fetch_limit = limit * 3 if relevant_only else limit  # over-fetch to filter
+    articles = database.recent_articles(limit=fetch_limit, ticker=ticker)
+    if relevant_only:
+        articles = [a for a in articles if a.get("tickers")][:limit]
+    return {"articles": articles}
 
 
 @app.get("/api/portfolio")

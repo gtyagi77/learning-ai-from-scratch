@@ -84,8 +84,12 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
    are resolved to Yahoo's `.NS` form (`RELIANCE` → `RELIANCE.NS`); BSE codes
    use `.BO`.
 4. **Watch universe** (`app/universe.py`) — every crawl attributes news
-   against the full Nifty 50 plus thematic baskets (AI & IT, data centers &
-   digital infrastructure, energy & power, defence), ~100 stocks in all.
+   against the full Nifty 50 plus thematic baskets: **AI & Emerging Tech**
+   (product/data-led companies — LatentView, Tata Elxsi, KPIT, Affle, Netweb,
+   Zensar, Happiest Minds, Tanla), **IT Services** (the large headcount-billed
+   outsourcing majors — TCS, Infosys, Wipro, HCLTech, etc. — kept separate so
+   the AI basket isn't dominated by them), data centers & digital
+   infrastructure, energy & power, and defence — ~100 stocks in all.
    The **market scan** ranks whichever of them have news in the window by
    signal strength, per sector, and any of them can be added to the
    portfolio with one click. Index membership changes over time — the lists
@@ -131,9 +135,20 @@ same-origin checks on writes, and restrictive security headers.
 
 **Google sign-in (optional):** create an OAuth client at
 console.cloud.google.com → Credentials, set the redirect URI to
-`https://<your-host>/api/auth/google/callback`, then set
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `OAUTH_REDIRECT_BASE`
-env vars. The "Continue with Google" button appears automatically.
+`https://<your-host>/api/auth/google/callback`, then set `GOOGLE_CLIENT_ID`
+and `GOOGLE_CLIENT_SECRET` env vars. The "Continue with Google" button
+appears automatically. The callback URL is derived from the incoming
+request's own host/scheme by default, so `OAUTH_REDIRECT_BASE` normally
+does **not** need setting — only override it if the app sits behind a proxy
+that changes the public hostname (uncommon). Leaving it at its localhost
+default while deployed is the #1 cause of `redirect_uri_mismatch` errors
+from Google, and is no longer a way you can get bitten by that.
+
+**Dashboard layout:** four tabs — **Portfolio** (add tickers, recommendation
+cards, risk profile), **Holdings** (CSV upload, P&L, tax), **Market Scan**
+(sector baskets), **News** (defaults to articles that mention a tracked
+stock; check "Show all market news" to also see untagged macro/economy
+pieces). The macro strip stays visible above all tabs.
 
 **Holdings upload:** upload your broker CSV (Zerodha holdings or tradebook,
 Groww, Upstox) or the downloadable generic template

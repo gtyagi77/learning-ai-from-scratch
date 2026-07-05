@@ -1,11 +1,14 @@
 """The watch universe scanned on every cycle, beyond the user's portfolio.
 
 Nifty 50 constituents plus thematic baskets Indian retail investors track
-closely: AI/IT, data centers & digital infrastructure, energy & power, and
-defence. Symbols use Yahoo Finance form (.NS = NSE). Index membership
-changes a couple of times a year — edit the lists here to keep them fresh.
-A ticker may appear in several sectors (e.g. Reliance in energy and data
-centers); the scanner dedupes the underlying analysis.
+closely: AI & emerging tech, IT services, data centers & digital
+infrastructure, energy & power, and defence. AI and IT services are
+deliberately separate baskets — the AI basket is product/data-led companies,
+not the large headcount-billed outsourcing majors. Symbols use Yahoo Finance
+form (.NS = NSE). Index membership changes a couple of times a year — edit
+the lists here to keep them fresh. A ticker may appear in several sectors
+(e.g. Reliance in energy and data centers); the scanner dedupes the
+underlying analysis.
 """
 
 from typing import Dict, List, Tuple
@@ -63,7 +66,24 @@ NIFTY_50: List[Tuple[str, str]] = [
     ("WIPRO.NS", "Wipro"),
 ]
 
-AI_AND_IT: List[Tuple[str, str]] = [
+# Genuine AI / analytics / emerging-tech plays — deliberately excludes the
+# large staffing-model IT services firms (those are their own basket below),
+# so this reflects companies whose business is AI/data/product-led rather
+# than headcount-billed services.
+AI_AND_EMERGING_TECH: List[Tuple[str, str]] = [
+    ("TATAELXSI.NS", "Tata Elxsi"),
+    ("KPITTECH.NS", "KPIT Technologies"),
+    ("AFFLE.NS", "Affle India"),
+    ("NETWEB.NS", "Netweb Technologies"),
+    ("LATENTVIEW.NS", "LatentView Analytics"),
+    ("ZENSARTECH.NS", "Zensar Technologies"),
+    ("HAPPSTMNDS.NS", "Happiest Minds Technologies"),
+    ("TANLA.NS", "Tanla Platforms"),
+]
+
+# Traditional headcount-billed IT services companies — split out from AI so
+# the "AI" basket isn't dominated by generic outsourcing majors.
+IT_SERVICES: List[Tuple[str, str]] = [
     ("TCS.NS", "Tata Consultancy Services"),
     ("INFY.NS", "Infosys"),
     ("HCLTECH.NS", "HCL Technologies"),
@@ -73,12 +93,8 @@ AI_AND_IT: List[Tuple[str, str]] = [
     ("PERSISTENT.NS", "Persistent Systems"),
     ("COFORGE.NS", "Coforge"),
     ("MPHASIS.NS", "Mphasis"),
-    ("TATAELXSI.NS", "Tata Elxsi"),
-    ("KPITTECH.NS", "KPIT Technologies"),
     ("CYIENT.NS", "Cyient"),
     ("OFSS.NS", "Oracle Financial Services"),
-    ("AFFLE.NS", "Affle India"),
-    ("NETWEB.NS", "Netweb Technologies"),
 ]
 
 DATA_CENTERS: List[Tuple[str, str]] = [
@@ -138,7 +154,8 @@ DEFENCE: List[Tuple[str, str]] = [
 ]
 
 SECTORS: Dict[str, List[Tuple[str, str]]] = {
-    "AI & IT": AI_AND_IT,
+    "AI & Emerging Tech": AI_AND_EMERGING_TECH,
+    "IT Services": IT_SERVICES,
     "Data Centers & Digital Infra": DATA_CENTERS,
     "Energy & Power": ENERGY_AND_POWER,
     "Defence": DEFENCE,
@@ -160,7 +177,8 @@ def watch_symbols() -> List[str]:
 # a stock trading well below its sector's typical multiple scores as cheap,
 # well above as expensive. Deliberately coarse; edit as market levels shift.
 SECTOR_PE: Dict[str, float] = {
-    "AI & IT": 26.0,
+    "AI & Emerging Tech": 45.0,   # smaller, higher-growth, richer-multiple names
+    "IT Services": 24.0,
     "Data Centers & Digital Infra": 30.0,
     "Energy & Power": 14.0,
     "Defence": 38.0,
@@ -208,7 +226,8 @@ FINANCIAL_SYMBOLS = {
 # rising). E.g. IT exporters benefit from a weak rupee (+0.6 x usdinr);
 # the broad market suffers from it (FII outflows, import bill).
 MACRO_SENSITIVITY = {
-    "AI & IT":                     {"nifty": 0.4, "usdinr": 0.6, "brent": 0.0, "vix": -0.3},
+    "AI & Emerging Tech":           {"nifty": 0.5, "usdinr": 0.3, "brent": 0.0, "vix": -0.4},
+    "IT Services":                  {"nifty": 0.4, "usdinr": 0.6, "brent": 0.0, "vix": -0.3},
     "Data Centers & Digital Infra": {"nifty": 0.5, "usdinr": 0.2, "brent": -0.1, "vix": -0.3},
     "Energy & Power":              {"nifty": 0.4, "usdinr": -0.2, "brent": -0.3, "vix": -0.3},
     "Defence":                     {"nifty": 0.3, "usdinr": 0.0, "brent": -0.1, "vix": -0.2},

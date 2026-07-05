@@ -210,6 +210,22 @@
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     border-radius: 8px; padding: 7px 10px; line-height: 1.45; }
   /* --- market scan --- */
+  /* --- top-level tabs --- */
+  .toptabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--grid);
+    margin: 18px 0 0; flex-wrap: wrap;
+  }
+  .toptab {
+    background: none; border: 0; border-bottom: 2px solid transparent;
+    color: var(--ink-2); font: inherit; font-size: 14px; font-weight: 600;
+    padding: 10px 14px; cursor: pointer; margin-bottom: -1px;
+  }
+  .toptab:hover { color: var(--ink); }
+  .toptab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  .tabpanel { padding-top: 18px; }
+  .tabpanel[hidden] { display: none; }
+  .news-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+    color: var(--ink-2); cursor: pointer; }
   .sector { margin-bottom: 18px; }
   .sector h3 { font-size: 14px; margin: 14px 0 6px; }
   .sector h3 .cnt { color: var(--muted); font-weight: 400; font-size: 12px; }
@@ -257,58 +273,77 @@
     investment advice.
   </div>
 
-  <h2>Macro environment</h2>
+  <p class="status-line" style="margin-top:16px">Macro environment</p>
   <div class="macro-strip" id="macro"></div>
   <div class="tilt-chips" id="tilts"></div>
 
-  <h2>Portfolio</h2>
-  <div class="add-row">
-    <input id="ticker-input" placeholder="Ticker (RELIANCE.NS)" maxlength="20">
-    <input id="name-input" placeholder="Company name (optional)">
-    <button id="add-btn">Add to portfolio</button>
-    <button id="refresh-btn" class="ghost">Crawl now</button>
-    <select id="profile" class="profile-sel" title="Risk profile shifts component weights">
-      <option value="balanced">Balanced</option>
-      <option value="conservative">Conservative</option>
-      <option value="aggressive">Aggressive</option>
-    </select>
-  </div>
-  <p class="status-line" id="action-line"></p>
-  <p class="status-line">Rating blends <strong>Value</strong> (P/E vs sector,
-    analyst targets &amp; street consensus), <strong>Quality</strong> (ROE,
-    debt/equity, revenue &amp; profit growth, margins), <strong>News</strong>
-    (48h, headline-specific weighted) and <strong>Macro</strong> (sector
-    sensitivity to Nifty trend, USD/INR, Brent, India VIX) — weights set by
-    your risk profile (balanced: 35/25/25/15). Combined signal ≥ +0.35
-    <strong>STRONG BUY</strong> · ≥ +0.12 <strong>BUY</strong> · −0.12…+0.12
-    <strong>HOLD</strong> · ≤ −0.12 <strong>SELL</strong> · ≤ −0.35
-    <strong>STRONG SELL</strong>. STRONG needs both value and quality data;
-    news-only ratings are capped at BUY/SELL; a rating never contradicts its
-    own target. Click any ticker for financial history and charts.</p>
-  <div class="cards" id="cards"></div>
+  <nav class="toptabs" id="toptabs" role="tablist">
+    <button class="toptab" data-tab="portfolio" role="tab">Portfolio</button>
+    <button class="toptab" data-tab="holdings" role="tab">Holdings</button>
+    <button class="toptab" data-tab="scan" role="tab">Market Scan</button>
+    <button class="toptab" data-tab="news" role="tab">News</button>
+  </nav>
 
-  <h2>My holdings — P&amp;L &amp; tax</h2>
-  <div class="add-row">
-    <input type="file" id="csv-input" accept=".csv,text/csv" style="max-width:260px">
-    <button id="upload-btn">Upload holdings CSV</button>
-    <a class="ghost" href="/api/holdings/template" download
-       style="text-decoration:none;padding:8px 14px;border:1px solid var(--border);border-radius:6px;color:var(--ink-2);font-size:14px">Download template</a>
-  </div>
-  <p class="status-line">Accepts the generic template, Zerodha holdings/tradebook,
-    Groww and Upstox exports. Buy dates drive the tax math (STCG 20% ≤ 1 year,
-    LTCG 12.5% beyond, ₹1.25L/FY exemption); lots without dates are treated as
-    short-term until you set a date. <strong>Not tax advice.</strong></p>
-  <p class="status-line" id="upload-msg"></p>
-  <div class="summary-tiles" id="holdings-summary"></div>
-  <div class="holdings-table-wrap" id="holdings-table"></div>
+  <section class="tabpanel" id="panel-portfolio" data-tab="portfolio">
+    <div class="add-row">
+      <input id="ticker-input" placeholder="Ticker (RELIANCE.NS)" maxlength="20">
+      <input id="name-input" placeholder="Company name (optional)">
+      <button id="add-btn">Add to portfolio</button>
+      <button id="refresh-btn" class="ghost">Crawl now</button>
+      <select id="profile" class="profile-sel" title="Risk profile shifts component weights">
+        <option value="balanced">Balanced</option>
+        <option value="conservative">Conservative</option>
+        <option value="aggressive">Aggressive</option>
+      </select>
+    </div>
+    <p class="status-line" id="action-line"></p>
+    <p class="status-line">Rating blends <strong>Value</strong> (P/E vs sector,
+      analyst targets &amp; street consensus), <strong>Quality</strong> (ROE,
+      debt/equity, revenue &amp; profit growth, margins), <strong>News</strong>
+      (48h, headline-specific weighted) and <strong>Macro</strong> (sector
+      sensitivity to Nifty trend, USD/INR, Brent, India VIX) — weights set by
+      your risk profile (balanced: 35/25/25/15). Combined signal ≥ +0.35
+      <strong>STRONG BUY</strong> · ≥ +0.12 <strong>BUY</strong> · −0.12…+0.12
+      <strong>HOLD</strong> · ≤ −0.12 <strong>SELL</strong> · ≤ −0.35
+      <strong>STRONG SELL</strong>. STRONG needs both value and quality data;
+      news-only ratings are capped at BUY/SELL; a rating never contradicts its
+      own target. Click any ticker for financial history and charts.</p>
+    <div class="cards" id="cards"></div>
+  </section>
 
-  <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
-  <p class="status-line">News-driven signals across the whole watch universe
-    (AI &amp; IT, data centers, energy &amp; power, defence, Nifty 50), strongest first.</p>
-  <div id="scan"></div>
+  <section class="tabpanel" id="panel-holdings" data-tab="holdings" hidden>
+    <h2>My holdings — P&amp;L &amp; tax</h2>
+    <div class="add-row">
+      <input type="file" id="csv-input" accept=".csv,text/csv" style="max-width:260px">
+      <button id="upload-btn">Upload holdings CSV</button>
+      <a class="ghost" href="/api/holdings/template" download
+         style="text-decoration:none;padding:8px 14px;border:1px solid var(--border);border-radius:6px;color:var(--ink-2);font-size:14px">Download template</a>
+    </div>
+    <p class="status-line">Accepts the generic template, Zerodha holdings/tradebook,
+      Groww and Upstox exports. Buy dates drive the tax math (STCG 20% ≤ 1 year,
+      LTCG 12.5% beyond, ₹1.25L/FY exemption); lots without dates are treated as
+      short-term until you set a date. <strong>Not tax advice.</strong></p>
+    <p class="status-line" id="upload-msg"></p>
+    <div class="summary-tiles" id="holdings-summary"></div>
+    <div class="holdings-table-wrap" id="holdings-table"></div>
+  </section>
 
-  <h2>Latest market news</h2>
-  <div id="news"></div>
+  <section class="tabpanel" id="panel-scan" data-tab="scan" hidden>
+    <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
+    <p class="status-line">News-driven signals across the whole watch universe
+      (AI &amp; emerging tech, IT services, data centers, energy &amp; power,
+      defence, Nifty 50), strongest first.</p>
+    <div id="scan"></div>
+  </section>
+
+  <section class="tabpanel" id="panel-news" data-tab="news" hidden>
+    <h2>Latest market news</h2>
+    <label class="news-toggle">
+      <input type="checkbox" id="news-all-toggle">
+      Show all market news (including macro/economy pieces not tied to a tracked stock)
+    </label>
+    <div id="news"></div>
+  </section>
 
   <footer>
     NSE stocks use the .NS suffix (RELIANCE.NS), BSE codes use .BO — known NSE
@@ -613,7 +648,8 @@ async function loadRecommendations() {
 }
 
 async function loadNews() {
-  const res = await fetch("/api/news?limit=30");
+  const relevantOnly = !$("news-all-toggle").checked;
+  const res = await fetch(`/api/news?limit=30&relevant_only=${relevantOnly}`);
   const data = await res.json();
   $("news").innerHTML = (data.articles || []).map(a => `
     <div class="news-item">
@@ -793,7 +829,16 @@ async function checkAuth() {
   if (!me.authenticated) {
     $("login").hidden = false;
     const err = new URLSearchParams(location.search).get("auth_error");
-    if (err) $("li-err").textContent = err;
+    if (err) {
+      $("li-err").textContent = err;
+    } else if (document.cookie.includes("advisor_seen=")) {
+      // A prior login left this marker, but the server no longer recognizes
+      // the (HttpOnly) session cookie — the most common cause on a
+      // free-tier host is the server restarting and losing its ephemeral
+      // database, which wipes accounts along with sessions.
+      $("li-err").textContent =
+        "Your session expired (the server may have restarted) — please log in again.";
+    }
     return false;
   }
   $("login").hidden = true;
@@ -836,6 +881,20 @@ async function refreshAll() {
   await Promise.allSettled([loadStatus(), loadMacro(), loadRecommendations(),
                             loadHoldings(), loadScan(), loadNews()]);
 }
+
+// ---- top-level tabs ----
+function setActiveTab(name) {
+  document.querySelectorAll(".toptab").forEach(btn =>
+    btn.setAttribute("aria-selected", String(btn.dataset.tab === name)));
+  document.querySelectorAll(".tabpanel").forEach(panel =>
+    panel.hidden = panel.dataset.tab !== name);
+  localStorage.setItem("activeTab", name);
+}
+document.querySelectorAll(".toptab").forEach(btn =>
+  btn.addEventListener("click", () => setActiveTab(btn.dataset.tab)));
+setActiveTab(localStorage.getItem("activeTab") || "portfolio");
+
+$("news-all-toggle").addEventListener("change", loadNews);
 
 $("profile").value = profileSel();
 $("profile").addEventListener("change", async () => {
