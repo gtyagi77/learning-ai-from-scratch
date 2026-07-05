@@ -348,15 +348,19 @@
   <section class="tabpanel" id="panel-holdings" data-tab="holdings" hidden>
     <h2>My holdings — P&amp;L &amp; tax</h2>
     <div class="add-row">
-      <input type="file" id="csv-input" accept=".csv,text/csv" style="max-width:260px">
-      <button id="upload-btn">Upload holdings CSV</button>
+      <input type="file" id="csv-input"
+             accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+             style="max-width:260px">
+      <button id="upload-btn">Upload holdings file</button>
       <a class="ghost" href="/api/holdings/template" download
          style="text-decoration:none;padding:8px 14px;border:1px solid var(--border);border-radius:6px;color:var(--ink-2);font-size:14px">Download template</a>
     </div>
-    <p class="status-line">Accepts the generic template, Zerodha holdings/tradebook,
-      Groww and Upstox exports. Buy dates drive the tax math (STCG 20% ≤ 1 year,
-      LTCG 12.5% beyond, ₹1.25L/FY exemption); lots without dates are treated as
-      short-term until you set a date. <strong>Not tax advice.</strong></p>
+    <p class="status-line">Accepts .csv or .xlsx: the generic template,
+      Zerodha holdings/tradebook (Console exports these as .xlsx by
+      default), Groww and Upstox exports. Buy dates drive the tax math
+      (STCG 20% ≤ 1 year, LTCG 12.5% beyond, ₹1.25L/FY exemption); lots
+      without dates are treated as short-term until you set a date.
+      <strong>Not tax advice.</strong></p>
     <p class="status-line" id="upload-msg"></p>
     <div class="summary-tiles" id="holdings-summary"></div>
     <div class="holdings-table-wrap" id="holdings-table"></div>
@@ -987,12 +991,14 @@ async function loadHoldings() {
 
 async function uploadHoldings() {
   const file = $("csv-input").files[0];
-  if (!file) { $("upload-msg").textContent = "Choose a CSV file first."; return; }
+  if (!file) { $("upload-msg").textContent = "Choose a .csv or .xlsx file first."; return; }
   $("upload-btn").disabled = true;
   $("upload-msg").textContent = "Uploading…";
   try {
+    // The server detects .csv vs .xlsx from the bytes themselves, so the
+    // declared Content-Type here doesn't need to be exact.
     const res = await fetch("/api/holdings/upload", {
-      method: "POST", headers: { "Content-Type": "text/csv" }, body: file });
+      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "upload failed");
     let msg = `Imported ${data.imported} lot(s) (${data.format}).`;

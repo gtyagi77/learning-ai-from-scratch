@@ -459,16 +459,14 @@ def holdings_view(user: Dict = Depends(get_current_user)):
 @app.post("/api/holdings/upload")
 async def holdings_upload(request: Request,
                           user: Dict = Depends(get_current_user)):
-    """Accepts the CSV as the raw request body (text/csv) — the dashboard
-    sends the picked file directly, no multipart needed."""
+    """Accepts the CSV or .xlsx as the raw request body — the dashboard
+    sends the picked file directly, no multipart needed. .xlsx vs CSV is
+    detected from the bytes themselves (Zerodha's Console exports default
+    to .xlsx)."""
     raw = await request.body()
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="file too large (1 MB max)")
-    try:
-        content = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="file is not UTF-8 text/CSV")
-    lots, fmt, errors = holdings.parse_csv(content)
+    lots, fmt, errors = holdings.parse_holdings_file(raw)
     if not lots and errors:
         raise HTTPException(status_code=400, detail="; ".join(errors[:5]))
     result = holdings.import_lots(user["id"], lots, source=fmt)

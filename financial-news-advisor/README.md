@@ -172,9 +172,11 @@ and rating filter), **News** (defaults to articles that mention a tracked
 stock; check "Show all market news" to also see untagged macro/economy
 pieces). The macro strip stays visible above all tabs.
 
-**Holdings upload:** upload your broker CSV (Zerodha holdings or tradebook,
-Groww, Upstox) or the downloadable generic template
-(`symbol,quantity,buy_price,buy_date`). Tradebook uploads net buys/sells
+**Holdings upload:** upload your broker export as **.csv or .xlsx**
+(Zerodha's Console holdings/tradebook exports default to .xlsx — this is
+detected automatically from the file itself, no need to convert it) —
+Zerodha holdings or tradebook, Groww, Upstox, or the downloadable generic
+template (`symbol,quantity,buy_price,buy_date`). Tradebook uploads net buys/sells
 FIFO into surviving lots with accurate dates. The dashboard then shows
 per-position P&L and Indian capital-gains analysis: short/long-term split,
 tax if sold today (STCG 20% ≤ 1 year, LTCG 12.5% beyond with the ₹1.25 lakh
