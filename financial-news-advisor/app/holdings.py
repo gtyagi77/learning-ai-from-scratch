@@ -104,8 +104,9 @@ FORMATS = {
                   "avgprice": "buy_price"}),
 }
 _HEADER_ALIASES = {
-    "qty": ("qty", "qty.", "quantity"),
-    "avgcost": ("avgcost", "avg.cost", "avgcost."),
+    "instrument": ("instrument", "symbol"),
+    "qty": ("qty", "qty.", "quantity", "quantity available"),
+    "avgcost": ("avgcost", "avg.cost", "avgcost.", "average price"),
     "avgprice": ("avgprice", "averageprice", "avg.price"),
     "stockname": ("stockname", "companyname", "scripname"),
     "averagebuyprice": ("averagebuyprice", "avgbuyprice", "buyaverageprice"),
@@ -147,13 +148,28 @@ def _cell_to_str(v) -> str:
     return str(v)
 
 
-_HEADER_SCAN_ROWS = 15
+_HEADER_SCAN_ROWS = 50
+
+
+def _select_xlsx_sheet(wb):
+    """Some Zerodha exports bundle multiple sheets (Equity / Mutual Funds /
+    Combined) -- prefer the one literally named "Equity" over whichever
+    sheet happens to be marked active, since that's the one with tickers
+    this app can price. Falls back to wb.active for single-sheet exports."""
+    for name in wb.sheetnames:
+        if name.strip().lower() == "equity":
+            return wb[name]
+    return wb.active
 
 
 def _rows_from_xlsx(raw: bytes) -> Tuple[List[str], List[Dict[str, str]]]:
-    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    # read_only=True (streaming mode) has been observed to silently
+    # truncate some real-world exports to a single row -- uploads are
+    # capped at MAX_UPLOAD_BYTES anyway, so loading fully into memory
+    # costs nothing meaningful and is the more robust choice here.
+    wb = openpyxl.load_workbook(io.BytesIO(raw), data_only=True)
     try:
-        sheet = wb.active
+        sheet = _select_xlsx_sheet(wb)
         all_rows = list(sheet.iter_rows(values_only=True))
         if not all_rows:
             return [], []
@@ -204,9 +220,9 @@ def _process_rows(headers: List[str], rows: List[Dict[str, str]]) -> Tuple[List[
             price = _num(_header_value(row, "buy_price", "buyprice"))
             bdate = _date(_header_value(row, "buy_date", "buydate"))
         elif fmt == "zerodha_holdings":
-            sym_raw = _header_value(row, "instrument")
-            qty = _num(_header_value(row, "qty", "qty.", "quantity"))
-            price = _num(_header_value(row, "avg cost", "avg. cost", "avgcost"))
+            sym_raw = _header_value(row, "instrument", "symbol")
+            qty = _num(_header_value(row, "qty", "qty.", "quantity", "quantity available"))
+            price = _num(_header_value(row, "avg cost", "avg. cost", "avgcost", "average price"))
             bdate = None
         elif fmt == "groww":
             sym_raw = _header_value(row, "stock name", "company name", "scrip name")

@@ -127,6 +127,73 @@ def test_parse_xlsx_skips_title_preamble_before_header_row():
     assert not errors
 
 
+def test_parse_xlsx_zerodha_portfolio_statement_shape():
+    # Mirrors the real shape of Zerodha's newer multi-sheet "portfolio
+    # statement" export: Equity/Mutual Funds/Combined sheets, a ~22-row
+    # preamble (guide text, Client ID, report title, a Summary stats
+    # block) before the real header row, and different column names
+    # (Symbol/Quantity Available/Average Price) than the classic
+    # Instrument/Qty./Avg. cost holdings export. All data below is
+    # synthetic, not the real uploaded file.
+    import io as _io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    equity = wb.active
+    equity.title = "Equity"
+    preamble = [
+        [None], [None], [None],
+        [None, "View Zerodha's guide on using tax reports for filing."],
+        [None], [None],
+        [None, "Client ID", "TEST0000"],
+        [None], [None], [None],
+        [None, "Equity Holdings Statement as on 2026-01-01"],
+        [None],
+        [None, "Summary"],
+        [None],
+        [None, "Invested Value", 100000],
+        [None, "Present Value", 110000],
+        [None, "Unrealized P&L", 10000],
+        [None, "Unrealized P&L Pct.", 10.0],
+        [None], [None],
+        [None, ""],
+        [None],
+    ]
+    for row in preamble:
+        equity.append(row)
+    equity.append([None, "Symbol", "ISIN", "Sector", "Quantity Available",
+                   "Quantity Discrepant", "Quantity Long Term",
+                   "Quantity Pledged (Margin)", "Quantity Pledged (Loan)",
+                   "Average Price", "Previous Closing Price",
+                   "Unrealized P&L", "Unrealized P&L Pct."])
+    equity.append([None, "RELIANCE", "INE002A01018", "ENERGY", 10, 0, 10,
+                   0, 0, 1450.5, 1500.0, 500, 3.4])
+    equity.append([None, "TCS", "INE467B01029", "IT", 5, 0, 5,
+                   0, 0, 3600.0, 3650.0, 250, 1.4])
+
+    mf = wb.create_sheet("Mutual Funds")
+    mf.append(["Fund Name", "Units", "NAV"])
+    mf.append(["Some Fund", 100, 25.5])
+
+    wb.create_sheet("Combined")
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+
+    lots, fmt, errors = holdings.parse_xlsx(buf.getvalue())
+    assert fmt == "zerodha_holdings"
+    assert not errors
+    by_sym = {l["symbol"]: l for l in lots}
+    assert set(by_sym) == {"RELIANCE.NS", "TCS.NS"}
+    assert by_sym["RELIANCE.NS"]["quantity"] == 10
+    assert by_sym["RELIANCE.NS"]["buy_price"] == 1450.5
+    assert by_sym["TCS.NS"]["quantity"] == 5
+    # The Mutual Funds sheet's "Fund Name"/"Units"/"NAV" columns never
+    # leak into the parsed Equity lots.
+    assert "Some Fund" not in str(lots)
+
+
 def test_parse_xlsx_still_reports_unrecognized_columns_with_no_match():
     raw = _make_xlsx(["foo", "bar"], [[1, 2]])
     lots, fmt, errors = holdings.parse_xlsx(raw)
