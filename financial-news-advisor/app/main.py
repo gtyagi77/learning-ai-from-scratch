@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlparse
@@ -405,17 +406,22 @@ def delete_holding(ticker: str, user: Dict = Depends(get_current_user)):
 
 
 def _positions_for(user_id: int) -> Dict[str, Dict]:
-    """Tax-analyzed positions per ticker for a user's lots."""
-    out: Dict[str, Dict] = {}
+    """Tax-analyzed positions per ticker for a user's lots. Quotes are
+    fetched concurrently -- a portfolio with dozens of tickers would
+    otherwise pay each network round-trip sequentially."""
     lots = database.get_lots(user_id)
     by_ticker: Dict[str, List[Dict]] = {}
     for lot in lots:
         by_ticker.setdefault(lot["ticker"], []).append(lot)
-    for tkr, tlots in by_ticker.items():
-        quote = prices.get_quote(tkr)
-        out[tkr] = taxes.analyze_position(tkr, tlots,
-                                          quote["price"] if quote else None)
-    return out
+    if not by_ticker:
+        return {}
+    tkrs = list(by_ticker.keys())
+    with ThreadPoolExecutor(max_workers=min(10, len(tkrs))) as pool:
+        quotes = list(pool.map(prices.get_quote, tkrs))
+    return {
+        tkr: taxes.analyze_position(tkr, by_ticker[tkr], q["price"] if q else None)
+        for tkr, q in zip(tkrs, quotes)
+    }
 
 
 @app.get("/api/recommendations")

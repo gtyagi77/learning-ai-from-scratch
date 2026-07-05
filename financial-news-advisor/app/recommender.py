@@ -27,11 +27,18 @@ Educational tooling only — not investment advice.
 """
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import (config, database, financials, fundamentals, macro, prices,
                sentiment, universe)
+
+# recommend_for_ticker is I/O-bound (screener/Yahoo/macro fetches per
+# symbol) — a modest thread pool lets those network waits overlap instead
+# of serializing across an entire portfolio. screener.py's own pacing lock
+# still rate-limits screener.in specifically regardless of pool size.
+_FETCH_WORKERS = 10
 
 RISK_PROFILES = {
     "conservative": {"value": 0.40, "quality": 0.35, "news": 0.15, "macro": 0.10},
@@ -512,19 +519,23 @@ def recommend_for_ticker(ticker: str, name: Optional[str] = None,
     }
 
 
+def _recommend_holdings_concurrently(holdings: List[Dict], risk_profile: str) -> List[Dict]:
+    if not holdings:
+        return []
+    with ThreadPoolExecutor(max_workers=min(_FETCH_WORKERS, len(holdings))) as pool:
+        futures = [pool.submit(recommend_for_ticker, h["ticker"], h.get("name"),
+                              risk_profile=risk_profile)
+                   for h in holdings]
+        return [f.result() for f in futures]  # preserves holdings order
+
+
 def recommend_portfolio(risk_profile: str = "balanced") -> List[Dict]:
-    return [
-        recommend_for_ticker(h["ticker"], h.get("name"), risk_profile=risk_profile)
-        for h in database.get_portfolio()
-    ]
+    return _recommend_holdings_concurrently(database.get_portfolio(), risk_profile)
 
 
 def recommend_portfolio_for_user(user_id: int,
                                  risk_profile: str = "balanced") -> List[Dict]:
-    return [
-        recommend_for_ticker(h["ticker"], h.get("name"), risk_profile=risk_profile)
-        for h in database.get_portfolio(user_id)
-    ]
+    return _recommend_holdings_concurrently(database.get_portfolio(user_id), risk_profile)
 
 
 def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced",
