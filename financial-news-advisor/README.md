@@ -92,8 +92,11 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
    infrastructure, energy & power, and defence — ~100 stocks in all.
    The **market scan** ranks whichever of them have news in the window by
    signal strength, per sector, and any of them can be added to the
-   portfolio with one click. Index membership changes over time — the lists
-   are plain data in `universe.py`, edit them there.
+   portfolio with one click. IT Services is excluded from the market scan
+   view by request — it's still tracked for valuation/macro purposes, so an
+   IT services stock you hold directly is scored correctly. Index membership
+   changes over time — the lists are plain data in `universe.py`, edit them
+   there.
 5. **Recommender** (`app/recommender.py`) — ratings blend four components,
    weighted by your risk profile (balanced 35/25/25/15, conservative,
    aggressive), renormalized over whatever data resolves:

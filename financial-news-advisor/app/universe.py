@@ -9,6 +9,11 @@ form (.NS = NSE). Index membership changes a couple of times a year — edit
 the lists here to keep them fresh. A ticker may appear in several sectors
 (e.g. Reliance in energy and data centers); the scanner dedupes the
 underlying analysis.
+
+Market Scan shows `SCAN_SECTORS`, a curated subset of `SECTORS` (by request,
+IT Services is excluded from that view). `SECTORS` itself stays the full set
+and continues to back per-symbol valuation/macro lookups, so an IT services
+stock a user actually holds is still scored against the right P/E baseline.
 """
 
 from typing import Dict, List, Tuple
@@ -160,6 +165,13 @@ SECTORS: Dict[str, List[Tuple[str, str]]] = {
     "Energy & Power": ENERGY_AND_POWER,
     "Defence": DEFENCE,
     "Nifty 50": NIFTY_50,
+}
+
+# Market Scan shows this curated subset — IT Services (staffing-model
+# outsourcers) is tracked for valuation purposes if a user holds one of
+# these stocks, but is excluded from the scan view itself by request.
+SCAN_SECTORS: Dict[str, List[Tuple[str, str]]] = {
+    name: members for name, members in SECTORS.items() if name != "IT Services"
 }
 
 # symbol -> display name across every sector (first name wins).

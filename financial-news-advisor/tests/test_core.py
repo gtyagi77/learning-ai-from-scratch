@@ -556,6 +556,22 @@ def test_scan_universe_ranks_newsy_tickers(monkeypatch):
     # Tickers without news never appear in scan results.
     for s in sectors.values():
         assert all(r["news_count"] > 0 for r in s["results"])
+    # IT Services is excluded from Market Scan by request.
+    assert "IT Services" not in sectors
+    assert {"AI & Emerging Tech", "Data Centers & Digital Infra",
+            "Energy & Power", "Defence", "Nifty 50"} <= set(sectors)
+
+
+def test_scan_sectors_excludes_it_services_but_keeps_its_valuation():
+    from app import universe
+
+    assert "IT Services" not in universe.SCAN_SECTORS
+    assert "IT Services" in universe.SECTORS
+    assert set(universe.SCAN_SECTORS) == set(universe.SECTORS) - {"IT Services"}
+    # A user holding an IT services stock still gets its real sector P/E,
+    # not the default-market fallback, even though the sector is hidden
+    # from Market Scan.
+    assert universe.sector_pe_for("TCS.NS") == universe.SECTOR_PE["IT Services"]
 
 
 def test_portfolio_crud():

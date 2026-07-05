@@ -532,7 +532,7 @@ def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced") -> L
     symbol sweep never triggers a screener crawl."""
     cache: Dict[str, Dict] = {}
     sectors = []
-    for sector, members in universe.SECTORS.items():
+    for sector, members in universe.SCAN_SECTORS.items():
         rows = []
         seen = set()
         for symbol, name in members:
