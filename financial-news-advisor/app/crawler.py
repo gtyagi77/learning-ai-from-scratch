@@ -65,7 +65,9 @@ def _holding_feed(symbol: str, name: Optional[str]) -> Optional[str]:
     # doesn't understand ".NS" symbols), scoped with "stock" to stay on the
     # equity story and off unrelated same-name news.
     base = name or symbol.split(".")[0]
-    query = urllib.parse.quote_plus(f'"{base}" stock')
+    # Quoted company name keeps results specific; "stock OR shares" keeps
+    # them on the equity story; when:2d keeps them inside the scoring window.
+    query = urllib.parse.quote_plus(f'"{base}" (stock OR shares) when:2d')
     return config.GOOGLE_NEWS_TEMPLATE.format(query=query)
 
 
@@ -112,6 +114,9 @@ def crawl_once() -> int:
             text = f"{item.title}. {item.summary}"
             score = sentiment.score_article(item.title, item.summary)
             mentioned = tickers.extract_tickers(text, symbols, extra_names)
+            # Headline-level mentions are tracked separately: the recommender
+            # counts an article fully only for stocks named in the headline.
+            in_title = tickers.extract_tickers(item.title, symbols, extra_names)
             # Per-holding feed items are attributed to the holding only when
             # the article really mentions it (see _holding_mentioned).
             if source.startswith("Holding:"):
@@ -119,9 +124,13 @@ def crawl_once() -> int:
                 if symbol not in mentioned and _holding_mentioned(
                         text, symbol, holding_names.get(symbol)):
                     mentioned.append(symbol)
+                if symbol not in in_title and _holding_mentioned(
+                        item.title, symbol, holding_names.get(symbol)):
+                    in_title.append(symbol)
             published = item.published.timestamp() if item.published else None
             if database.insert_article(source, item.title, item.link,
-                                       item.summary, published, score, mentioned):
+                                       item.summary, published, score,
+                                       mentioned, in_title):
                 new_count += 1
 
     database.prune_articles()

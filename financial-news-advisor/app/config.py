@@ -23,6 +23,30 @@ DB_PATH = os.environ.get(
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "advisor.db"),
 )
 
+# ---- accounts & security ----
+# Signup open by default (first registered user becomes admin); set
+# ALLOW_SIGNUP=0 after creating your account to close registration.
+ALLOW_SIGNUP = os.environ.get("ALLOW_SIGNUP", "1") not in ("0", "false", "no")
+SESSION_TTL_DAYS = float(os.environ.get("SESSION_TTL_DAYS", "30"))
+# Google sign-in (optional): create an OAuth client in Google Cloud Console
+# with redirect URI {OAUTH_REDIRECT_BASE}/api/auth/google/callback.
+# Left unset, the redirect base is auto-derived from each incoming request's
+# scheme/host (see main._request_base) — this env var only needs setting if
+# the app is reachable at a different public URL than what it sees directly
+# (unusual proxy setups).
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+OAUTH_REDIRECT_BASE_DEFAULT = "http://127.0.0.1:8000"
+OAUTH_REDIRECT_BASE = os.environ.get("OAUTH_REDIRECT_BASE", OAUTH_REDIRECT_BASE_DEFAULT)
+# Cookies marked Secure only when served over https (Render terminates TLS).
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "auto")
+
+# ---- Indian capital gains tax (listed equity, STT paid) ----
+TAX_STCG_RATE = float(os.environ.get("TAX_STCG_RATE", "0.20"))     # <= 12 months
+TAX_LTCG_RATE = float(os.environ.get("TAX_LTCG_RATE", "0.125"))    # > 12 months
+TAX_LTCG_EXEMPTION = float(os.environ.get("TAX_LTCG_EXEMPTION", "125000"))  # per FY
+TAX_LT_DAYS = int(os.environ.get("TAX_LT_DAYS", "365"))
+
 HTTP_TIMEOUT_SECONDS = 15
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "

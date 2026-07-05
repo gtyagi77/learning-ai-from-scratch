@@ -52,7 +52,7 @@ def test_full_pipeline(monkeypatch):
     monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
 
     database.init(":memory:")
-    database.upsert_holding("AAPL", "Apple")
+    database.upsert_holding("AAPL", "Apple")   # pre-auth rows (user_id 0)
     database.upsert_holding("TSLA", "Tesla")
 
     added = crawler.crawl_once()
@@ -61,15 +61,28 @@ def test_full_pipeline(monkeypatch):
     # Second crawl dedupes everything.
     assert crawler.crawl_once() == 0
 
-    client = TestClient(app, raise_server_exceptions=True)
+    # Data endpoints require a login.
+    anon = TestClient(app, raise_server_exceptions=True)
+    assert anon.get("/api/news").status_code == 401
 
+    from tests.conftest import make_authed_client
+    client = make_authed_client()
+    # First registered user adopts the pre-auth AAPL/TSLA portfolio rows.
+    tickers_now = {h["ticker"] for h in client.get("/api/portfolio").json()["holdings"]}
+    assert {"AAPL", "TSLA"} <= tickers_now
+
+    # Default view is relevant_only=True: the untagged "Fed leaves rates
+    # unchanged" macro piece is dropped, the two company-tagged ones stay.
     news = client.get("/api/news").json()["articles"]
-    assert len(news) == 3
+    assert len(news) == 2
     by_link = {a["link"]: a for a in news}
     assert "AAPL" in by_link["http://local.test/apple-1"]["tickers"]
     assert by_link["http://local.test/apple-1"]["sentiment"] > 0.2
     assert "TSLA" in by_link["http://local.test/tesla-1"]["tickers"]
     assert by_link["http://local.test/tesla-1"]["sentiment"] < -0.2
+
+    all_news = client.get("/api/news?relevant_only=false").json()["articles"]
+    assert len(all_news) == 3
 
     recs = client.get("/api/recommendations").json()["recommendations"]
     by_ticker = {r["ticker"]: r for r in recs}

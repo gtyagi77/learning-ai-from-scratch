@@ -84,23 +84,94 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
    are resolved to Yahoo's `.NS` form (`RELIANCE` → `RELIANCE.NS`); BSE codes
    use `.BO`.
 4. **Watch universe** (`app/universe.py`) — every crawl attributes news
-   against the full Nifty 50 plus thematic baskets (AI & IT, data centers &
-   digital infrastructure, energy & power, defence), ~100 stocks in all.
+   against the full Nifty 50 plus thematic baskets: **AI & Emerging Tech**
+   (product/data-led companies — LatentView, Tata Elxsi, KPIT, Affle, Netweb,
+   Zensar, Happiest Minds, Tanla), **IT Services** (the large headcount-billed
+   outsourcing majors — TCS, Infosys, Wipro, HCLTech, etc. — kept separate so
+   the AI basket isn't dominated by them), data centers & digital
+   infrastructure, energy & power, and defence — ~100 stocks in all.
    The **market scan** ranks whichever of them have news in the window by
    signal strength, per sector, and any of them can be added to the
-   portfolio with one click. Index membership changes over time — the lists
-   are plain data in `universe.py`, edit them there.
-5. **Recommender** (`app/recommender.py`) combines the last 48 h of articles
-   per ticker with exponential recency decay (12 h half-life) into one signal,
-   then:
-   - **Action**: signal ≥ 0.35 → STRONG BUY, ≥ 0.12 → BUY, ≤ -0.12 → SELL,
-     ≤ -0.35 → STRONG SELL, otherwise HOLD.
-   - **Degree of recommendation**: confidence in [0, 1] blending news volume,
-     agreement between articles, and signal conviction (shown as
-     low / moderate / high).
-   - **Target price**: `current × (1 + signal × 10% × (0.4 + 0.6 × confidence))`
-     — i.e. maximally positive, high-confidence news implies ≈ +10% over the
-     short horizon. Live quotes come from Yahoo Finance's public chart API.
+   portfolio with one click. Each sector can be hidden/unhidden per account
+   from checkboxes above the scan (persisted server-side) — hiding a sector
+   only affects what the scan shows, not valuation: a stock you hold
+   directly is still scored against its real sector P/E and macro
+   sensitivity even if that sector is hidden. Index membership changes over
+   time — the lists are plain data in `universe.py`, edit them there.
+   You can also **search and add** any company (by name, via
+   `GET /api/companies/search`) into a curated sector, or **create your own
+   custom sectors** with their own hand-picked companies — both are private
+   to your account, distinguished from the curated baskets with a "custom"
+   badge (sector-level) or an "added" chip + remove button (per-company),
+   and each sector has its own BUY/SELL/HOLD rating filter.
+5. **Recommender** (`app/recommender.py`) — ratings blend four components,
+   weighted by your risk profile (balanced 35/25/25/15, conservative,
+   aggressive), renormalized over whatever data resolves:
+   - **Value**: trailing/forward P/E vs a sector baseline (editable in
+     `universe.SECTOR_PE`; screener's Stock P/E backfills Yahoo's gated
+     P/E), analyst mean target & range, street consensus rating, gap to the
+     200-day average, 52-week range position.
+   - **Quality** (`app/financials.py` + `app/screener.py`): ROE,
+     debt-to-equity (computed from the balance sheet; skipped for
+     banks/NBFCs), revenue & net-profit 3-year CAGR, operating-margin
+     trend, latest-quarter sales YoY. Primary source is **screener.in**
+     (public pages, 24h cache, ≥1.5s pacing, robots.txt honored) with Yahoo
+     fallback — see the ToS note in `app/screener.py`.
+   - **News**: recency-decayed (12h half-life) sentiment of *specific*
+     coverage — headline mentions 1.0, passing mentions 0.35×, roundups 0.3×.
+   - **Macro** (`app/macro.py`): sector-sensitivity tilt from the Nifty
+     trend, USD/INR, Brent crude and India VIX (weak rupee helps IT
+     exporters; crude up helps ONGC, hurts OMCs), share capped at 25%.
+   - **Guards**: STRONG ratings need both value and quality data; news-only
+     ratings are capped at BUY/SELL; a rating that contradicts its own
+     valuation-anchored target is moderated to HOLD.
+   - **Time frames**: every recommendation carries dated horizons — Short
+     (1 month, news momentum), Medium (3 months, valuation mean-reversion +
+     macro), Long (12 months, analyst target / growth) — plus a strategy
+     block: entry approach, stop-loss, profit-booking level, position-size
+     hint, review triggers.
+   - Per-stock detail view: 1-year price chart with 50/200-day averages,
+     ~10 years of revenue & net profit, quarterly trend, key ratios, and
+     screener's pros/cons.
+
+## Accounts, holdings & tax
+
+The site requires a login: register with email + password on first visit
+(the first account becomes admin; set `ALLOW_SIGNUP=0` afterwards to close
+registration). Each user has their own portfolio, holdings, risk profile and
+recommendations. Security: scrypt-hashed passwords, revocable server-side
+sessions in HttpOnly/SameSite cookies, per-IP login rate-limiting,
+same-origin checks on writes, and restrictive security headers.
+
+**Google sign-in (optional):** create an OAuth client at
+console.cloud.google.com → Credentials, set the redirect URI to
+`https://<your-host>/api/auth/google/callback`, then set `GOOGLE_CLIENT_ID`
+and `GOOGLE_CLIENT_SECRET` env vars. The "Continue with Google" button
+appears automatically. The callback URL is derived from the incoming
+request's own host/scheme by default, so `OAUTH_REDIRECT_BASE` normally
+does **not** need setting — only override it if the app sits behind a proxy
+that changes the public hostname (uncommon). Leaving it at its localhost
+default while deployed is the #1 cause of `redirect_uri_mismatch` errors
+from Google, and is no longer a way you can get bitten by that.
+
+**Dashboard layout:** four tabs — **Deep Analysis** (search or type a ticker
+to add, recommendation cards, risk profile), **Holdings** (CSV upload, P&L,
+tax), **Market Scan** (sector baskets, custom sectors, per-sector search-add
+and rating filter), **News** (defaults to articles that mention a tracked
+stock; check "Show all market news" to also see untagged macro/economy
+pieces). The macro strip stays visible above all tabs.
+
+**Holdings upload:** upload your broker CSV (Zerodha holdings or tradebook,
+Groww, Upstox) or the downloadable generic template
+(`symbol,quantity,buy_price,buy_date`). Tradebook uploads net buys/sells
+FIFO into surviving lots with accurate dates. The dashboard then shows
+per-position P&L and Indian capital-gains analysis: short/long-term split,
+tax if sold today (STCG 20% ≤ 1 year, LTCG 12.5% beyond with the ₹1.25 lakh
+per-FY exemption applied at portfolio level), days until lots turn
+long-term, and tax saved by waiting. **SELL calls are tax-moderated**: if
+waiting ≤ 60 days for LTCG saves more than the expected downside, the call
+becomes HOLD with a dated explanation. Not tax advice; grandfathering
+(pre-2018 purchases) is out of scope.
 
 ## Run it
 
@@ -138,8 +209,11 @@ button — add this to point at your fork:
 
 **Notes for the free tier:** the instance spins down after ~15 min idle, so
 the first hit after a pause takes ~30–60 s to wake (cold start). Data is
-stored in SQLite on the instance's local disk, which resets on redeploy — the
-crawler simply re-populates it. For real-time NSE quotes instead of delayed
+stored in SQLite on the instance's local disk, which resets on redeploy —
+news re-populates automatically, but **user accounts and uploaded holdings
+are wiped too**. For a real multi-user deployment attach a persistent disk
+(paid Render feature) and point `DB_PATH` at it, or re-register/re-upload
+after each deploy. For real-time NSE quotes instead of delayed
 Yahoo data, set `QUOTE_PROVIDER=upstox` (or `angelone`) plus the token env
 vars in the Render service settings. The same image runs on Railway, Fly.io,
 or Google Cloud Run — anything that runs a container and sets `$PORT`.
@@ -156,6 +230,8 @@ grouping. Data persists in `advisor.db`.
 | `GET /` | Dashboard |
 | `GET /api/recommendations` | Action + confidence + target price per holding |
 | `GET /api/scan` | Same signals across the whole watch universe, grouped by sector |
+| `GET /api/macro` | Macro indicators (Nifty, USD/INR, Brent, India VIX) + sector tilts |
+| `GET /api/stock/{ticker}` | Detail: recommendation, financial history, price history w/ DMAs |
 | `GET /api/recommendations/{ticker}` | Same for any single ticker |
 | `GET /api/news?ticker=&limit=` | Crawled articles with sentiment |
 | `GET /api/portfolio` / `POST /api/portfolio` / `DELETE /api/portfolio/{t}` | Manage holdings |

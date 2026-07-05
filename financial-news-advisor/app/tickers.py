@@ -149,6 +149,10 @@ INDIA_COMPANY_MAP: Dict[str, str] = {
     "oracle financial services": "OFSS.NS",
     "affle": "AFFLE.NS",
     "netweb": "NETWEB.NS",
+    "latentview": "LATENTVIEW.NS", "latentview analytics": "LATENTVIEW.NS",
+    "zensar": "ZENSARTECH.NS", "zensar technologies": "ZENSARTECH.NS",
+    "happiest minds": "HAPPSTMNDS.NS",
+    "tanla": "TANLA.NS", "tanla platforms": "TANLA.NS",
     # --- data centers & digital infrastructure ---
     "tata communications": "TATACOMM.NS",
     "indus towers": "INDUSTOWER.NS",
@@ -227,8 +231,12 @@ INDIAN_BASES: Dict[str, str] = {
     if sym.endswith(".NS")
 }
 
-# Symbols that collide with everyday English words; only matched via
-# cashtags ($F) or company names, never as bare uppercase words.
+# Symbols that collide with everyday English words or common all-caps
+# usages; only matched via cashtags ($F) or company names, never as bare
+# uppercase words. Note the bare-word match is case-sensitive, so pure
+# acronym tickers (HAL, BEL, GAIL, PNB, DLF, MRF, SAIL, TRENT) are safe to
+# match — "HAL" in a headline is the company, "Hal" the person would not
+# match — and are deliberately NOT listed here.
 AMBIGUOUS_SYMBOLS: Set[str] = {
     "A", "ALL", "AN", "ANY", "ARE", "AT", "BE", "BIG", "BY", "CAN", "CEO",
     "DAY", "DO", "EPS", "ETF", "EU", "FOR", "GDP", "GO", "HAS", "HE", "IPO",
@@ -236,8 +244,7 @@ AMBIGUOUS_SYMBOLS: Set[str] = {
     "OR", "OUT", "PM", "REAL", "SEE", "SHE", "SO", "TECH", "THE", "TOP",
     "TWO", "UK", "UP", "US", "USA", "WELL", "WHO", "YOU", "C", "F", "GS",
     "MA", "MS", "T", "V", "DE", "GE", "GM", "HD", "KO", "PG", "LT", "IDEA",
-    "SAIL", "TRENT", "MRF", "BEL", "HAL", "GAIL", "PNB", "DLF", "OIL",
-    "PARAS", "E2E",
+    "OIL", "PARAS", "E2E",
 }
 
 # Phrases that contain a company alias but are a *different* entity — mostly
@@ -316,3 +323,31 @@ def extract_tickers(text: str, universe: Iterable[str], extra_names: Dict[str, s
             found.add(symbol)
 
     return sorted(found)
+
+
+def search_companies(query: str, limit: int = 15) -> List[Dict[str, str]]:
+    """Look up companies by (partial) name for interactive add-by-search UIs.
+
+    Prefers the watch universe's proper display names; falls back to a
+    title-cased COMPANY_MAP alias for tickers only known by alias (mostly
+    US large caps, or NSE names outside the curated sector baskets).
+    """
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    from . import universe as _universe  # local import: keeps this a leaf
+
+    candidates: Dict[str, str] = {}
+    for ticker, name in _universe.WATCHLIST.items():
+        candidates[ticker] = name
+    for alias, ticker in COMPANY_MAP.items():
+        candidates.setdefault(ticker, alias.title())
+
+    starts, contains = [], []
+    for ticker, name in candidates.items():
+        if name.lower().startswith(q) or ticker.lower().startswith(q):
+            starts.append((ticker, name))
+        elif q in name.lower():
+            contains.append((ticker, name))
+    results = sorted(starts) + sorted(contains)
+    return [{"ticker": t, "name": n} for t, n in results[:limit]]
