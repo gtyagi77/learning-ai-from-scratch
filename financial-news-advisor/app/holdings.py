@@ -1,20 +1,26 @@
-"""Holdings CSV upload: generic template, Zerodha, Groww, Upstox exports.
+"""Holdings upload: generic template, Zerodha, Groww, Upstox exports.
 
-Header-sniffing parsers built on the stdlib csv module. Every parser emits
-lot rows {symbol, quantity, buy_price, buy_date|None}; unresolved or
-malformed rows are reported back to the user, never silently dropped.
-Broker holdings exports usually lack buy dates (only tradebooks have them),
-so those lots are date-unknown and treated as short-term until the user
-fills the date in.
+Accepts both CSV and .xlsx (Zerodha's Console exports are .xlsx by
+default) — both are normalized to the same header-sniffing row logic.
+Every parser emits lot rows {symbol, quantity, buy_price, buy_date|None};
+unresolved or malformed rows are reported back to the user, never
+silently dropped. Broker holdings exports usually lack buy dates (only
+tradebooks have them), so those lots are date-unknown and treated as
+short-term until the user fills the date in.
 """
 
 import csv
 import io
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional, Tuple
 
+import openpyxl
+
 from . import database, tickers
+
+# .xlsx files are ZIP archives; every one starts with this signature.
+_XLSX_MAGIC = b"PK\x03\x04"
 
 MAX_ROWS = 2000
 
@@ -126,16 +132,60 @@ def _header_value(row: Dict[str, str], *names: str) -> Optional[str]:
     return None
 
 
-def parse_csv(content: str) -> Tuple[List[Dict], str, List[str]]:
-    """(lots, format_name, errors). Lots: symbol/quantity/buy_price/buy_date."""
-    errors: List[str] = []
-    try:
-        reader = csv.DictReader(io.StringIO(content))
-        headers = reader.fieldnames or []
-        rows = list(reader)[:MAX_ROWS]
-    except csv.Error as exc:
-        return [], "unknown", [f"could not parse CSV: {exc}"]
+def _cell_to_str(v) -> str:
+    """Normalize one openpyxl cell value to the same plain-string shape
+    csv.DictReader already hands the rest of this module — so format
+    detection, _num, _date etc. work identically regardless of source."""
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))  # avoid "10.0" for share counts
+    return str(v)
 
+
+_HEADER_SCAN_ROWS = 15
+
+
+def _rows_from_xlsx(raw: bytes) -> Tuple[List[str], List[Dict[str, str]]]:
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    try:
+        sheet = wb.active
+        all_rows = list(sheet.iter_rows(values_only=True))
+        if not all_rows:
+            return [], []
+
+        # Broker exports (Zerodha's Console .xlsx included) commonly prepend
+        # a title/account-info block before the real header row, so don't
+        # assume row 1 is it — scan for the first row _detect_format
+        # actually recognizes. Falls back to row 1 if nothing matches, so
+        # an unrecognized file still reports real header text.
+        header_idx = 0
+        for i, row in enumerate(all_rows[:_HEADER_SCAN_ROWS]):
+            candidate = [str(h).strip() if h is not None else "" for h in row]
+            if _detect_format(candidate):
+                header_idx = i
+                break
+
+        headers = [str(h).strip() if h is not None else "" for h in all_rows[header_idx]]
+        rows: List[Dict[str, str]] = []
+        for values in all_rows[header_idx + 1:]:
+            if all(v is None or (isinstance(v, str) and not v.strip()) for v in values):
+                continue  # skip fully blank rows (common trailing rows in exports)
+            row = {h: _cell_to_str(v) for h, v in zip(headers, values) if h}
+            rows.append(row)
+            if len(rows) >= MAX_ROWS:
+                break
+        return headers, rows
+    finally:
+        wb.close()
+
+
+def _process_rows(headers: List[str], rows: List[Dict[str, str]]) -> Tuple[List[Dict], str, List[str]]:
+    errors: List[str] = []
     fmt = _detect_format(headers)
     if not fmt:
         return [], "unknown", [
@@ -183,6 +233,39 @@ def parse_csv(content: str) -> Tuple[List[Dict], str, List[str]]:
         lots.append({"symbol": symbol, "quantity": qty, "buy_price": price,
                      "buy_date": bdate})
     return lots, fmt, errors
+
+
+def parse_csv(content: str) -> Tuple[List[Dict], str, List[str]]:
+    """(lots, format_name, errors). Lots: symbol/quantity/buy_price/buy_date."""
+    try:
+        reader = csv.DictReader(io.StringIO(content))
+        headers = reader.fieldnames or []
+        rows = list(reader)[:MAX_ROWS]
+    except csv.Error as exc:
+        return [], "unknown", [f"could not parse CSV: {exc}"]
+    return _process_rows(headers, rows)
+
+
+def parse_xlsx(raw: bytes) -> Tuple[List[Dict], str, List[str]]:
+    """Same as parse_csv but for .xlsx — Zerodha's Console exports default
+    to .xlsx, not CSV."""
+    try:
+        headers, rows = _rows_from_xlsx(raw)
+    except Exception as exc:
+        return [], "unknown", [f"could not read spreadsheet: {exc}"]
+    return _process_rows(headers, rows)
+
+
+def parse_holdings_file(raw: bytes) -> Tuple[List[Dict], str, List[str]]:
+    """Upload entry point: detects .xlsx (by its ZIP magic bytes) vs CSV
+    from the raw upload and parses accordingly."""
+    if raw[:4] == _XLSX_MAGIC:
+        return parse_xlsx(raw)
+    try:
+        content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return [], "unknown", ["file is not a recognized .csv or .xlsx file"]
+    return parse_csv(content)
 
 
 def _parse_tradebook(rows: List[Dict]) -> Tuple[List[Dict], str, List[str]]:
