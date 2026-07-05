@@ -240,6 +240,78 @@ add one, then set `DB_PATH` in **Environment** to a path under its mount,
 e.g. `/var/data/advisor.db`) so accounts survive restarts, or (2) accept
 it on the free tier and just register again after an idle period.
 
+**Self-hosting on your own machine (e.g. a Mac mini) — persistent by
+default:** running natively instead of on a host with an ephemeral
+container sidesteps the data-loss issue above entirely — `advisor.db`
+just lives on your Mac's own disk and nothing wipes it between restarts.
+
+1. Clone the repo, then in `financial-news-advisor/`:
+   ```bash
+   python3 -m venv .venv && source .venv/bin/activate
+   pip install -r requirements.txt
+   python run.py --port 8000   # confirm it serves http://127.0.0.1:8000
+   ```
+2. **Keep it always-on with launchd** so it survives reboots and logout,
+   and restarts itself if it ever crashes. Create
+   `~/Library/LaunchAgents/com.yourname.financial-advisor.plist`:
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+   <plist version="1.0"><dict>
+     <key>Label</key><string>com.yourname.financial-advisor</string>
+     <key>WorkingDirectory</key><string>/absolute/path/to/financial-news-advisor</string>
+     <key>ProgramArguments</key>
+     <array>
+       <string>/absolute/path/to/financial-news-advisor/.venv/bin/python3</string>
+       <string>run.py</string>
+       <string>--host</string><string>127.0.0.1</string>
+       <string>--port</string><string>8000</string>
+     </array>
+     <key>EnvironmentVariables</key>
+     <dict>
+       <key>GOOGLE_CLIENT_ID</key><string>your-client-id</string>
+       <key>GOOGLE_CLIENT_SECRET</key><string>your-client-secret</string>
+     </dict>
+     <key>RunAtLoad</key><true/>
+     <key>KeepAlive</key><true/>
+     <key>StandardOutPath</key><string>/tmp/financial-advisor.log</string>
+     <key>StandardErrorPath</key><string>/tmp/financial-advisor.err</string>
+   </dict></plist>
+   ```
+   Config is via plain `os.environ` (no `.env` auto-loading), so any env
+   var from the tables above (`QUOTE_PROVIDER`, `TAX_*`, etc.) goes in that
+   same `EnvironmentVariables` dict.
+   ```bash
+   launchctl load ~/Library/LaunchAgents/com.yourname.financial-advisor.plist
+   launchctl list | grep financial-advisor   # confirm it's loaded
+   tail -f /tmp/financial-advisor.log
+   # to stop: launchctl unload ~/Library/LaunchAgents/com.yourname.financial-advisor.plist
+   ```
+3. **A stable public URL, via Tailscale Funnel** (free, no domain needed —
+   the alternative is Cloudflare Tunnel if you own a domain and want a
+   branded subdomain instead): install
+   [Tailscale](https://tailscale.com/download), `sudo tailscale up` to log
+   in, then in the [Tailscale admin console](https://login.tailscale.com/admin/dns)
+   enable **HTTPS Certificates** for your tailnet (this is what gives your
+   Mac a real `.ts.net` hostname with a valid cert), enabling **Funnel**
+   too if it prompts you to. Then expose port 8000 — the current command
+   is shaped like `tailscale funnel 8000`, but Tailscale's CLI has changed
+   across versions, so run `tailscale funnel --help` (or check
+   [Tailscale's Funnel docs](https://tailscale.com/kb/1223/funnel)) to
+   confirm the exact flags for the version you install; I can't verify
+   live command syntax from here. Once it's running, Tailscale prints your
+   permanent URL: `https://<device-name>.<tailnet-name>.ts.net`.
+4. **Google OAuth against that URL** — same Google Cloud Console steps as
+   above (Credentials → OAuth client → redirect URI), just using
+   `https://<device-name>.<tailnet-name>.ts.net/api/auth/google/callback`
+   instead of a Render domain, with `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`
+   set in the plist from step 2. Leave `OAUTH_REDIRECT_BASE` unset —
+   `_request_base()` in `app/main.py` already derives the callback URL
+   from the `X-Forwarded-Proto`/`X-Forwarded-Host` headers Funnel sets as
+   it proxies the request, the same mechanism already relied on for
+   Render.
+
 The dashboard seeds a demo portfolio (Reliance, TCS, HDFC Bank, Infosys,
 Tata Motors, and Apple as a US-via-LRS example) on first run — add/remove
 your own tickers from the UI. NSE quotes render in ₹ with Indian digit
