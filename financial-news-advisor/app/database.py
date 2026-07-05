@@ -55,6 +55,7 @@ def init(db_path: Optional[str] = None) -> None:
                 google_sub TEXT UNIQUE,
                 is_admin INTEGER NOT NULL DEFAULT 0,
                 risk_profile TEXT NOT NULL DEFAULT 'balanced',
+                hidden_sectors TEXT NOT NULL DEFAULT '[]',
                 created_ts REAL NOT NULL
             );
             CREATE TABLE IF NOT EXISTS sessions (
@@ -81,6 +82,21 @@ def init(db_path: Optional[str] = None) -> None:
         if "title_tickers" not in cols:
             _conn.execute(
                 "ALTER TABLE articles ADD COLUMN title_tickers TEXT NOT NULL DEFAULT '[]'"
+            )
+        ucols = {row[1] for row in _conn.execute("PRAGMA table_info(users)")}
+        if "hidden_sectors" not in ucols:
+            _conn.execute(
+                "ALTER TABLE users ADD COLUMN hidden_sectors TEXT NOT NULL DEFAULT '[]'"
+            )
+            # IT Services was already hidden from Market Scan for existing
+            # accounts just before this migration (a hardcoded exclusion,
+            # now replaced by this per-account setting) — preserve that
+            # experience on upgrade rather than silently un-hiding it. Runs
+            # only the first time this column is added, so it can never
+            # clobber a later hide/unhide choice made through the UI.
+            _conn.execute(
+                "UPDATE users SET hidden_sectors = ? WHERE hidden_sectors = '[]'",
+                (json.dumps(["IT Services"]),),
             )
         # Old single-user portfolio (ticker PK, no user_id) -> rebuild with a
         # composite (user_id, ticker) key; orphan rows go to user_id 0 and
@@ -253,6 +269,20 @@ def set_risk_profile(user_id: int, profile: str) -> None:
     with _lock:
         _conn.execute("UPDATE users SET risk_profile = ? WHERE id = ?",
                       (profile, user_id))
+        _conn.commit()
+
+
+def get_hidden_sectors(user_id: int) -> List[str]:
+    with _lock:
+        row = _conn.execute("SELECT hidden_sectors FROM users WHERE id = ?",
+                            (user_id,)).fetchone()
+    return json.loads(row["hidden_sectors"]) if row and row["hidden_sectors"] else []
+
+
+def set_hidden_sectors(user_id: int, sectors: List[str]) -> None:
+    with _lock:
+        _conn.execute("UPDATE users SET hidden_sectors = ? WHERE id = ?",
+                      (json.dumps(sectors), user_id))
         _conn.commit()
 
 

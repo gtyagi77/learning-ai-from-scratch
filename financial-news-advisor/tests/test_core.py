@@ -556,21 +556,25 @@ def test_scan_universe_ranks_newsy_tickers(monkeypatch):
     # Tickers without news never appear in scan results.
     for s in sectors.values():
         assert all(r["news_count"] > 0 for r in s["results"])
-    # IT Services is excluded from Market Scan by request.
-    assert "IT Services" not in sectors
-    assert {"AI & Emerging Tech", "Data Centers & Digital Infra",
-            "Energy & Power", "Defence", "Nifty 50"} <= set(sectors)
+    # Default (no hidden_sectors) includes every sector.
+    assert {"AI & Emerging Tech", "IT Services", "Data Centers & Digital Infra",
+            "Energy & Power", "Defence", "Nifty 50"} == set(sectors)
 
 
-def test_scan_sectors_excludes_it_services_but_keeps_its_valuation():
+def test_scan_universe_respects_hidden_sectors():
+    from app import recommender
+
+    hidden = {s["sector"] for s in recommender.scan_universe(hidden_sectors={"IT Services"})}
+    assert "IT Services" not in hidden
+    shown = {s["sector"] for s in recommender.scan_universe()}
+    assert "IT Services" in shown
+
+
+def test_sector_pe_for_it_services_is_not_default():
     from app import universe
 
-    assert "IT Services" not in universe.SCAN_SECTORS
-    assert "IT Services" in universe.SECTORS
-    assert set(universe.SCAN_SECTORS) == set(universe.SECTORS) - {"IT Services"}
-    # A user holding an IT services stock still gets its real sector P/E,
-    # not the default-market fallback, even though the sector is hidden
-    # from Market Scan.
+    # Hiding a sector from Market Scan must never affect per-holding
+    # valuation: a stock in that sector still gets its real P/E baseline.
     assert universe.sector_pe_for("TCS.NS") == universe.SECTOR_PE["IT Services"]
 
 

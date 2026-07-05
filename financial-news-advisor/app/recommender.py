@@ -28,7 +28,7 @@ Educational tooling only — not investment advice.
 
 import time
 from datetime import date, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import (config, database, financials, fundamentals, macro, prices,
                sentiment, universe)
@@ -527,12 +527,17 @@ def recommend_portfolio_for_user(user_id: int,
     ]
 
 
-def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced") -> List[Dict]:
+def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced",
+                  hidden_sectors: Optional[Iterable[str]] = None) -> List[Dict]:
     """Scan the watch universe; financials are cache-only here so a 100+
-    symbol sweep never triggers a screener crawl."""
+    symbol sweep never triggers a screener crawl. hidden_sectors lets a
+    caller drop sectors a user has hidden from their Market Scan view."""
+    hidden = set(hidden_sectors or ())
     cache: Dict[str, Dict] = {}
     sectors = []
-    for sector, members in universe.SCAN_SECTORS.items():
+    for sector, members in universe.SECTORS.items():
+        if sector in hidden:
+            continue
         rows = []
         seen = set()
         for symbol, name in members:

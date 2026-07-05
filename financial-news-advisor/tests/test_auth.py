@@ -187,3 +187,58 @@ def test_cross_origin_writes_rejected():
     r = client.post("/api/portfolio", json={"ticker": "INFY.NS"},
                     headers={"Origin": "https://evil.example"})
     assert r.status_code == 403
+
+
+def test_hidden_sectors_get_set_round_trip():
+    user, _ = auth.register("sectors@test.local", "longenough1", None)
+    assert database.get_hidden_sectors(user["id"]) == []
+    database.set_hidden_sectors(user["id"], ["IT Services", "Defence"])
+    assert database.get_hidden_sectors(user["id"]) == ["IT Services", "Defence"]
+
+
+def test_hidden_sectors_migration_backfills_existing_users(tmp_path):
+    import json
+    import sqlite3
+    import time
+
+    db_path = str(tmp_path / "legacy.db")
+    conn = sqlite3.connect(db_path)
+    # Pre-migration schema: users table without hidden_sectors.
+    conn.execute("""
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            username TEXT,
+            password_hash TEXT,
+            google_sub TEXT UNIQUE,
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            risk_profile TEXT NOT NULL DEFAULT 'balanced',
+            created_ts REAL NOT NULL
+        )
+    """)
+    conn.execute("INSERT INTO users (email, created_ts) VALUES (?, ?)",
+                ("legacy@test.local", time.time()))
+    conn.commit()
+    conn.close()
+
+    database.init(db_path)
+    try:
+        row = database.get_user_by_email("legacy@test.local")
+        assert json.loads(row["hidden_sectors"]) == ["IT Services"]
+    finally:
+        database.init(":memory:")  # restore in-memory DB for later tests
+
+
+def test_set_hidden_sectors_endpoint_filters_scan():
+    client = make_authed_client()
+    assert client.post("/api/sectors/hidden",
+                       json={"hidden": ["Not A Sector"]}).status_code == 400
+
+    r = client.post("/api/sectors/hidden", json={"hidden": ["IT Services"]})
+    assert r.status_code == 200 and r.json()["hidden_sectors"] == ["IT Services"]
+    scan = client.get("/api/scan").json()
+    assert "IT Services" not in {s["sector"] for s in scan["sectors"]}
+
+    client.post("/api/sectors/hidden", json={"hidden": []})
+    scan = client.get("/api/scan").json()
+    assert "IT Services" in {s["sector"] for s in scan["sectors"]}

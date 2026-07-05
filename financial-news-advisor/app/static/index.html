@@ -226,6 +226,9 @@
   .tabpanel[hidden] { display: none; }
   .news-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
     color: var(--ink-2); cursor: pointer; }
+  .sector-toggles { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 10px 0 6px; }
+  .sector-toggles label { display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--ink-2); cursor: pointer; }
   .sector { margin-bottom: 18px; }
   .sector h3 { font-size: 14px; margin: 14px 0 6px; }
   .sector h3 .cnt { color: var(--muted); font-weight: 400; font-size: 12px; }
@@ -331,8 +334,10 @@
   <section class="tabpanel" id="panel-scan" data-tab="scan" hidden>
     <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
     <p class="status-line">News-driven signals across the whole watch universe
-      (AI &amp; emerging tech, data centers, energy &amp; power, defence,
-      Nifty 50), strongest first.</p>
+      (AI &amp; emerging tech, IT services, data centers, energy &amp; power,
+      defence, Nifty 50), strongest first. Untick a sector to hide it here —
+      it stays fully valued if you hold one of its stocks directly.</p>
+    <div class="sector-toggles" id="sector-toggles"></div>
     <div id="scan"></div>
   </section>
 
@@ -384,6 +389,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const profileSel = () => localStorage.getItem("riskProfile") || "balanced";
+let hiddenSectors = new Set();
 
 function esc(s) {
   const d = document.createElement("div");
@@ -848,7 +854,27 @@ async function checkAuth() {
     localStorage.setItem("riskProfile", me.risk_profile);
     $("profile").value = me.risk_profile;
   }
+  hiddenSectors = new Set(me.hidden_sectors || []);
+  renderSectorToggles(me.available_sectors || []);
   return true;
+}
+
+function renderSectorToggles(sectors) {
+  $("sector-toggles").innerHTML = sectors.map(name => `
+    <label><input type="checkbox" data-sector="${esc(name)}"
+      ${hiddenSectors.has(name) ? "" : "checked"}> ${esc(name)}</label>`).join("");
+  document.querySelectorAll("#sector-toggles input").forEach(box =>
+    box.addEventListener("change", async () => {
+      hiddenSectors = new Set(
+        [...document.querySelectorAll("#sector-toggles input:not(:checked)")]
+          .map(b => b.dataset.sector));
+      await fetch("/api/sectors/hidden", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hidden: [...hiddenSectors] }),
+      });
+      await loadScan();
+    }));
 }
 
 async function doAuth(path) {

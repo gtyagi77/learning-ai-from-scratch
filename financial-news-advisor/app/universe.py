@@ -10,10 +10,11 @@ the lists here to keep them fresh. A ticker may appear in several sectors
 (e.g. Reliance in energy and data centers); the scanner dedupes the
 underlying analysis.
 
-Market Scan shows `SCAN_SECTORS`, a curated subset of `SECTORS` (by request,
-IT Services is excluded from that view). `SECTORS` itself stays the full set
-and continues to back per-symbol valuation/macro lookups, so an IT services
-stock a user actually holds is still scored against the right P/E baseline.
+Users can hide/unhide individual sectors in the Market Scan view (per-account
+setting, see database.get_hidden_sectors/set_hidden_sectors) — SECTORS itself
+always stays the full set and continues to back per-symbol valuation/macro
+lookups, so a stock a user actually holds is scored correctly even if its
+sector is hidden from the scan.
 """
 
 from typing import Dict, List, Tuple
@@ -167,13 +168,6 @@ SECTORS: Dict[str, List[Tuple[str, str]]] = {
     "Nifty 50": NIFTY_50,
 }
 
-# Market Scan shows this curated subset — IT Services (staffing-model
-# outsourcers) is tracked for valuation purposes if a user holds one of
-# these stocks, but is excluded from the scan view itself by request.
-SCAN_SECTORS: Dict[str, List[Tuple[str, str]]] = {
-    name: members for name, members in SECTORS.items() if name != "IT Services"
-}
-
 # symbol -> display name across every sector (first name wins).
 WATCHLIST: Dict[str, str] = {}
 for _members in SECTORS.values():
@@ -183,6 +177,10 @@ for _members in SECTORS.values():
 
 def watch_symbols() -> List[str]:
     return list(WATCHLIST.keys())
+
+
+def sector_names() -> List[str]:
+    return list(SECTORS.keys())
 
 
 # Rough sector-average trailing P/E baselines for the valuation score —

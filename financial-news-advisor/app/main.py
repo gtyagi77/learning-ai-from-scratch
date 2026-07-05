@@ -143,6 +143,10 @@ class ProfileIn(BaseModel):
     risk_profile: str
 
 
+class HiddenSectorsIn(BaseModel):
+    hidden: List[str]
+
+
 @app.post("/api/auth/register")
 def register(body: RegisterIn, request: Request, response: Response):
     if auth.rate_limited(request.client.host if request.client else "?"):
@@ -181,7 +185,9 @@ def me(request: Request):
         return {"authenticated": False, **base}
     return {"authenticated": True, "email": user["email"],
             "username": user.get("username"), "is_admin": bool(user["is_admin"]),
-            "risk_profile": user.get("risk_profile", "balanced"), **base}
+            "risk_profile": user.get("risk_profile", "balanced"),
+            "hidden_sectors": database.get_hidden_sectors(user["id"]),
+            "available_sectors": universe.sector_names(), **base}
 
 
 @app.post("/api/auth/profile")
@@ -190,6 +196,15 @@ def set_profile(body: ProfileIn, user: Dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="unknown risk profile")
     database.set_risk_profile(user["id"], body.risk_profile)
     return {"ok": True, "risk_profile": body.risk_profile}
+
+
+@app.post("/api/sectors/hidden")
+def set_hidden_sectors(body: HiddenSectorsIn, user: Dict = Depends(get_current_user)):
+    unknown = sorted(set(body.hidden) - set(universe.sector_names()))
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"unknown sector(s): {unknown}")
+    database.set_hidden_sectors(user["id"], body.hidden)
+    return {"ok": True, "hidden_sectors": body.hidden}
 
 
 @app.get("/api/auth/google")
@@ -433,8 +448,9 @@ def scan(max_per_sector: int = 10, profile: Optional[str] = None,
             "Automatically generated from news, valuation, quality and macro "
             "signals for educational purposes only. Not investment advice."
         ),
-        "sectors": recommender.scan_universe(max(1, min(max_per_sector, 25)),
-                                             _profile_for(user, profile)),
+        "sectors": recommender.scan_universe(
+            max(1, min(max_per_sector, 25)), _profile_for(user, profile),
+            hidden_sectors=database.get_hidden_sectors(user["id"])),
     }
 
 
