@@ -26,6 +26,17 @@ NSE+BSE+US; it is unofficial and increasingly rate-limited. Any symbol a
 broker can't price (e.g. US holdings) falls back to Yahoo automatically, so
 the app always keeps working.
 
+**Known limitation:** Yahoo's endpoints require a crumb/cookie handshake
+for non-browser clients (`app/yahoo_session.py` does this once per
+process) and are known to block or challenge requests from some
+cloud-provider IP ranges outright — this can't always be worked around in
+code. `GET /api/status`'s `yahoo_session_ok` field tells you whether the
+handshake is actually succeeding from wherever the app is hosted; if it
+stays `false` (or prices/horizons/analyst data stay blank) even with the
+crumb handling in place, the reliable fix is switching to `upstox` or
+`angelone` above — both are keyed, official APIs Yahoo's blocking doesn't
+affect.
+
 #### Real-time NSE quotes via Upstox (~10 min, free)
 
 1. Open a free Upstox account if you don't have one, then create a developer

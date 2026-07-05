@@ -19,7 +19,8 @@ from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, field_validator
 
 from . import (auth, config, crawler, database, financials, fundamentals,
-               holdings, macro, prices, recommender, taxes, tickers, universe)
+               holdings, macro, prices, recommender, taxes, tickers, universe,
+               yahoo_session)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -302,6 +303,10 @@ def status():
         "crawl_interval_s": config.CRAWL_INTERVAL_SECONDS,
         "lookback_hours": config.LOOKBACK_HOURS,
         "server_time": time.time(),
+        # Whether Yahoo's crumb handshake succeeded from this host — a false
+        # here (with quote_provider still "yahoo") means Yahoo is blocking
+        # or challenging this host outright, not just a per-symbol miss.
+        "yahoo_session_ok": yahoo_session.session_ok(),
     }
 
 
