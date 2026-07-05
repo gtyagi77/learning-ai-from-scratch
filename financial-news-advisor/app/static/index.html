@@ -967,7 +967,7 @@ async function loadHoldings() {
     tile("Current value", s.current_value != null ? fmtMoney(s.current_value, "INR") : "—") +
     tile("Unrealized P&L", g != null ? `${g >= 0 ? "+" : "−"}${fmtMoney(Math.abs(g), "INR")}` : "—", g >= 0 ? "up" : "down") +
     tile("Tax if all sold today", s.tax_if_all_sold_today != null ? fmtMoney(s.tax_if_all_sold_today, "INR") : "—") +
-    tile("LTCG exemption used", fmtMoney(s.ltcg_exemption_applied ?? 0, "INR"));
+    tile("LTCG exemption used", s.ltcg_exemption_applied != null ? fmtMoney(s.ltcg_exemption_applied, "INR") : "—");
   const rows = positions.map(p => {
     const sym = splitSymbol(p.ticker);
     const g = p.unrealized_gain;

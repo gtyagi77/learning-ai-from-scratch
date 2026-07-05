@@ -114,8 +114,18 @@ def portfolio_summary(positions: List[Dict]) -> Dict:
     current = sum(p["current_value"] for p in valued) if valued else None
     st_gain = sum(max(0.0, p["st_gain"]) for p in positions)
     lt_gain = sum(max(0.0, p["lt_gain"]) for p in positions)
-    lt_taxable = max(0.0, lt_gain - config.TAX_LTCG_EXEMPTION)
-    tax = round(st_gain * config.TAX_STCG_RATE + lt_taxable * config.TAX_LTCG_RATE, 2)
+    # Gains are computed off live quotes; with none available (e.g. quote
+    # provider unreachable) st_gain/lt_gain are 0 for every position, which
+    # would otherwise render as a confident "₹0.00 tax" rather than the
+    # "unknown" it actually is — match the same all-or-nothing rule already
+    # used for current_value/unrealized_gain above.
+    if valued:
+        lt_taxable = max(0.0, lt_gain - config.TAX_LTCG_EXEMPTION)
+        tax = round(st_gain * config.TAX_STCG_RATE + lt_taxable * config.TAX_LTCG_RATE, 2)
+        exemption_applied = round(min(lt_gain, config.TAX_LTCG_EXEMPTION), 2)
+    else:
+        tax = None
+        exemption_applied = None
     return {
         "invested": round(invested, 2),
         "current_value": round(current, 2) if current is not None else None,
@@ -123,7 +133,7 @@ def portfolio_summary(positions: List[Dict]) -> Dict:
                             if current is not None else None),
         "st_gain": round(st_gain, 2),
         "lt_gain": round(lt_gain, 2),
-        "ltcg_exemption_applied": round(min(lt_gain, config.TAX_LTCG_EXEMPTION), 2),
+        "ltcg_exemption_applied": exemption_applied,
         "tax_if_all_sold_today": tax,
         "positions": len(positions),
         "note": ("STCG {:.0%} <= {} days; LTCG {:.1%} beyond, with ₹{:,.0f}/FY "

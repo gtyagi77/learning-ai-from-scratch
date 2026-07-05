@@ -278,6 +278,19 @@ def test_portfolio_summary_applies_exemption_once():
         (200000 - config.TAX_LTCG_EXEMPTION) * config.TAX_LTCG_RATE, 2)
 
 
+def test_portfolio_summary_reports_unknown_tax_when_no_quotes_available():
+    # With no live price for any position, gains are computed as 0 for
+    # every lot (see analyze_position's `if current_price else 0.0`) --
+    # tax/exemption must come back as None ("unknown"), not a confident
+    # ₹0.00, matching current_value/unrealized_gain's existing behavior.
+    lots = [{"quantity": 100, "buy_price": 1000, "buy_date": _days_ago(500)}]
+    p1 = taxes.analyze_position("NOPRICE.NS", lots, current_price=None)
+    summary = taxes.portfolio_summary([p1])
+    assert summary["current_value"] is None
+    assert summary["tax_if_all_sold_today"] is None
+    assert summary["ltcg_exemption_applied"] is None
+
+
 def test_sell_moderated_to_hold_when_waiting_beats_downside():
     # ST lot, 30 days from turning LT, big gain -> tax saved by waiting is
     # large; expected downside is small -> HOLD with a dated note.
