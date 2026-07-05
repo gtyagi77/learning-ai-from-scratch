@@ -147,17 +147,32 @@ def _cell_to_str(v) -> str:
     return str(v)
 
 
+_HEADER_SCAN_ROWS = 15
+
+
 def _rows_from_xlsx(raw: bytes) -> Tuple[List[str], List[Dict[str, str]]]:
     wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
     try:
         sheet = wb.active
-        rows_iter = sheet.iter_rows(values_only=True)
-        header_row = next(rows_iter, None)
-        if header_row is None:
+        all_rows = list(sheet.iter_rows(values_only=True))
+        if not all_rows:
             return [], []
-        headers = [str(h).strip() if h is not None else "" for h in header_row]
+
+        # Broker exports (Zerodha's Console .xlsx included) commonly prepend
+        # a title/account-info block before the real header row, so don't
+        # assume row 1 is it — scan for the first row _detect_format
+        # actually recognizes. Falls back to row 1 if nothing matches, so
+        # an unrecognized file still reports real header text.
+        header_idx = 0
+        for i, row in enumerate(all_rows[:_HEADER_SCAN_ROWS]):
+            candidate = [str(h).strip() if h is not None else "" for h in row]
+            if _detect_format(candidate):
+                header_idx = i
+                break
+
+        headers = [str(h).strip() if h is not None else "" for h in all_rows[header_idx]]
         rows: List[Dict[str, str]] = []
-        for values in rows_iter:
+        for values in all_rows[header_idx + 1:]:
             if all(v is None or (isinstance(v, str) and not v.strip()) for v in values):
                 continue  # skip fully blank rows (common trailing rows in exports)
             row = {h: _cell_to_str(v) for h, v in zip(headers, values) if h}

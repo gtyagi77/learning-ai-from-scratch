@@ -83,13 +83,15 @@ def test_unknown_format_reports_headers():
 
 # ---------------- .xlsx parser (Zerodha Console exports default to .xlsx) ----------------
 
-def _make_xlsx(headers, rows) -> bytes:
+def _make_xlsx(headers, rows, preamble=None) -> bytes:
     import io as _io
 
     from openpyxl import Workbook
 
     wb = Workbook()
     ws = wb.active
+    for pre_row in (preamble or []):
+        ws.append(pre_row)
     ws.append(headers)
     for row in rows:
         ws.append(row)
@@ -108,6 +110,29 @@ def test_parse_xlsx_zerodha_holdings():
     assert fmt == "zerodha_holdings"
     assert {l["symbol"] for l in lots} == {"RELIANCE.NS", "TATAMOTORS.NS"}
     assert not errors
+
+
+def test_parse_xlsx_skips_title_preamble_before_header_row():
+    # Real Zerodha Console exports prepend a title/account-info block
+    # before the actual column headers -- the header row is not row 1.
+    raw = _make_xlsx(
+        ["Instrument", "Qty.", "Avg. cost", "LTP", "Cur. val", "P&L"],
+        [["RELIANCE", 10, 1450.50, 1528.4, 15284, 779]],
+        preamble=[["Holdings statement for XX1234 as on 05-Jul-2026"],
+                  [None, None, None]],
+    )
+    lots, fmt, errors = holdings.parse_xlsx(raw)
+    assert fmt == "zerodha_holdings"
+    assert lots and lots[0]["symbol"] == "RELIANCE.NS"
+    assert not errors
+
+
+def test_parse_xlsx_still_reports_unrecognized_columns_with_no_match():
+    raw = _make_xlsx(["foo", "bar"], [[1, 2]])
+    lots, fmt, errors = holdings.parse_xlsx(raw)
+    assert fmt == "unknown" and not lots
+    assert "unrecognized columns" in errors[0]
+    assert "foo" in errors[0] and "bar" in errors[0]
 
 
 def test_parse_xlsx_with_native_date_cells():
