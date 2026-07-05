@@ -229,6 +229,17 @@ Yahoo data, set `QUOTE_PROVIDER=upstox` (or `angelone`) plus the token env
 vars in the Render service settings. The same image runs on Railway, Fly.io,
 or Google Cloud Run — anything that runs a container and sets `$PORT`.
 
+**Login suddenly stops working?** If you registered fine but a *later*
+login says "incorrect email or password" even though you're sure it's
+right, this is that same free-tier disk reset, not a bug — the account
+genuinely no longer exists once the service has spun down and restarted.
+(The login error is intentionally generic either way — a real security
+practice, not a bug — so it never reveals whether an account exists.) Two
+options: (1) attach a Render persistent disk (service → **Disks** tab →
+add one, then set `DB_PATH` in **Environment** to a path under its mount,
+e.g. `/var/data/advisor.db`) so accounts survive restarts, or (2) accept
+it on the free tier and just register again after an idle period.
+
 The dashboard seeds a demo portfolio (Reliance, TCS, HDFC Bank, Infosys,
 Tata Motors, and Apple as a US-via-LRS example) on first run — add/remove
 your own tickers from the UI. NSE quotes render in ₹ with Indian digit

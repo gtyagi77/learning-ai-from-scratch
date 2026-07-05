@@ -1071,7 +1071,18 @@ async function doAuth(path) {
     if (!res.ok) throw new Error(data.detail || "failed");
     location.reload();
   } catch (e) {
-    $("li-err").textContent = e.message;
+    let msg = e.message;
+    // A login rejection is deliberately generic (never reveals whether the
+    // account exists), but if this browser previously had a working
+    // account here (the advisor_seen marker cookie), the likeliest cause
+    // on a free-tier host is a restart wiping the ephemeral database, not
+    // a typo — add that as a hint without changing the server's response.
+    if (path.endsWith("/login") && document.cookie.includes("advisor_seen=")) {
+      msg += " If you registered here before and this is unexpected, the " +
+        "server may have restarted and lost its data (common on free " +
+        "hosting tiers) — you may need to register again.";
+    }
+    $("li-err").textContent = msg;
   }
 }
 
