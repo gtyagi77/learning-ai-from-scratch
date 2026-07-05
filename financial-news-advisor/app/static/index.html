@@ -369,6 +369,10 @@
       defence, Nifty 50, plus any custom sectors you create), strongest
       first. Untick a sector to hide it here — it stays fully valued if you
       hold one of its stocks directly.</p>
+    <div class="add-row">
+      <p class="status-line" id="scan-crawl-line"></p>
+      <button id="scan-crawl-btn" class="ghost">Crawl now</button>
+    </div>
     <div class="sector-toggles" id="sector-toggles"></div>
     <div class="add-row">
       <input id="new-sector-input" placeholder="New sector name" style="width:200px">
@@ -751,7 +755,8 @@ async function loadScan() {
         </div>
       </div>
       ${s.results.length ? s.results.map(r => scanRow(r, inPortfolio, s.sector)).join("")
-        : `<p class="empty">No news signals in the window yet.</p>`}
+        : `<p class="empty">No news signals in the window yet — matching depends on
+             recent coverage; try "Crawl now" above if you just deployed.</p>`}
     </div>`).join("");
 
   document.querySelectorAll(".mini-add").forEach(btn =>
@@ -808,6 +813,14 @@ async function loadStatus() {
     ` · news: ${s.news_provider ?? "—"} · quotes: ${s.quote_provider ?? "—"}` +
     ` · last crawl ${c.last_run ? timeAgo(c.last_run) : "pending"}` +
     ` · ${c.feeds_ok ?? 0} feeds ok` + (c.feeds_failed ? `, ${c.feeds_failed} failed` : "");
+  // Market Scan only lists tickers with matching news — this line explains
+  // why a sector might look empty (feed health / no crawl yet) right where
+  // that emptiness is visible, instead of only in the top-of-page strip.
+  $("scan-crawl-line").textContent =
+    `${c.feeds_ok ?? 0} of ${(c.feeds_ok ?? 0) + (c.feeds_failed ?? 0)} feeds reachable` +
+    ` · last crawl ${c.last_run ? timeAgo(c.last_run) : "pending"}` +
+    ` · ${s.articles_stored} articles stored.` +
+    (s.articles_stored ? "" : " A sector only shows stocks with recent matching news — try Crawl now if you just deployed.");
 }
 
 async function addTicker() {
@@ -889,16 +902,23 @@ async function removeTicker(ticker) {
   await loadRecommendations();
 }
 
-async function crawlNow() {
-  $("refresh-btn").disabled = true;
-  $("action-line").textContent = "Crawling feeds…";
+async function crawlNow(btnId = "refresh-btn", lineId = "action-line") {
+  $(btnId).disabled = true;
+  $(lineId).textContent = "Crawling feeds…";
   try {
     const res = await fetch("/api/crawl", { method: "POST" });
     const data = await res.json();
-    $("action-line").textContent = `Crawl finished: ${data.new_articles} new article(s).`;
-  } catch { $("action-line").textContent = "Crawl failed."; }
+    // For scan-crawl-line, refreshAll() below re-derives a fresher status
+    // message from the just-completed crawl via loadStatus() — only
+    // action-line (which loadStatus() doesn't touch) needs setting here.
+    if (lineId === "action-line") {
+      $(lineId).textContent = `Crawl finished: ${data.new_articles} new article(s).`;
+    }
+  } catch {
+    if (lineId === "action-line") $(lineId).textContent = "Crawl failed.";
+  }
   await refreshAll();
-  $("refresh-btn").disabled = false;
+  $(btnId).disabled = false;
 }
 
 async function loadHoldings() {
@@ -1102,7 +1122,8 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal")
 $("add-btn").addEventListener("click", addTicker);
 $("ticker-input").addEventListener("keydown", e => { if (e.key === "Enter") addTicker(); });
 $("name-input").addEventListener("keydown", e => { if (e.key === "Enter") addTicker(); });
-$("refresh-btn").addEventListener("click", crawlNow);
+$("refresh-btn").addEventListener("click", () => crawlNow());
+$("scan-crawl-btn").addEventListener("click", () => crawlNow("scan-crawl-btn", "scan-crawl-line"));
 
 checkAuth().then(ok => {
   if (ok) {
