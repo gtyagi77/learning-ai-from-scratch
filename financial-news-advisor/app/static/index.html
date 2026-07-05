@@ -246,8 +246,8 @@
   .sector-toggles label { display: inline-flex; align-items: center; gap: 6px;
     font-size: 13px; color: var(--ink-2); cursor: pointer; }
   .sector { margin-bottom: 18px; }
-  .sector h3 { font-size: 14px; margin: 14px 0 6px; }
-  .sector h3 .cnt { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .sector h3 { font-size: 18px; margin: 18px 0 8px; }
+  .sector h3 .cnt { color: var(--muted); font-weight: 400; font-size: 13px; }
   .scan-row {
     display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
     padding: 8px 2px; border-bottom: 1px solid var(--grid); font-size: 14px;
@@ -522,6 +522,26 @@ function positionLine(r) {
     ${p.next_lt_days != null ? ` · ${p.st_quantity} sh short-term, long-term in ${p.next_lt_days}d` : ""}</span></div>`;
 }
 
+function streetLine(r) {
+  const a = r.analyst;
+  if (!a || (a.rating == null && a.count == null && a.target_mean == null
+             && a.target_low == null && a.target_high == null)) return "";
+  const bits = [];
+  if (a.rating != null) {
+    bits.push(`<strong>${a.rating.toFixed(1)}/5</strong> consensus` +
+      (a.count != null ? ` from ${a.count} analyst${a.count === 1 ? "" : "s"}` : ""));
+  } else if (a.count != null) {
+    bits.push(`${a.count} analyst${a.count === 1 ? "" : "s"}`);
+  }
+  if (a.target_low != null && a.target_high != null) {
+    bits.push(`target ${fmtMoney(a.target_low, r.currency)}–${fmtMoney(a.target_high, r.currency)}` +
+      (a.target_mean != null ? ` (mean ${fmtMoney(a.target_mean, r.currency)})` : ""));
+  } else if (a.target_mean != null) {
+    bits.push(`mean target ${fmtMoney(a.target_mean, r.currency)}`);
+  }
+  return `<div class="meter-row"><span><strong>Street:</strong> ${bits.join(" · ")}</span></div>`;
+}
+
 function card(r) {
   const sym = splitSymbol(r.ticker);
   const chg = r.change_pct == null ? "" :
@@ -560,6 +580,7 @@ function card(r) {
       · ${fmtComp("News", r.news_count ? r.news_signal : null)}
       · ${fmtComp("Macro", r.macro_tilt)}
       → <strong>${r.signal >= 0 ? "+" : ""}${(r.signal ?? 0).toFixed(2)}</strong></span></div>
+    ${streetLine(r)}
     ${positionLine(r)}
     ${r.tax_note ? `<div class="tax-note">💡 ${esc(r.tax_note)}</div>` : ""}
     ${horizonsTable(r)}
@@ -674,6 +695,7 @@ async function openDetail(ticker) {
       ${fin.quarterly?.sales ? `<h4>Quarterly trend</h4>${svgBars(fin.quarterly.sales, fin.quarterly.net_profit, "Sales", "Net profit", "₹ Cr")}` : ""}
       ${ratios ? `<h4>Key ratios ${fin.source ? `(source: ${esc(fin.source)})` : ""}</h4><div class="ratio-grid">${ratios}</div>` : ""}
       ${prosCons}
+      ${streetLine(r)}
       <h4>Plan</h4>
       ${horizonsTable(r)}
       ${strategyLine(r)}`;

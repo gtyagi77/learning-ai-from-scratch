@@ -1,12 +1,13 @@
 """Valuation inputs per ticker: price history stats + fundamental ratios.
 
-Two sources, both best-effort:
-  - Yahoo's chart endpoint (1y daily closes, keyless, reliable): 52-week
-    range position and the 200-day moving average gap.
+Two sources, both best-effort, both fetched through yahoo_session's shared
+crumb/cookie session (Yahoo requires a crumb handshake for non-browser
+clients on these endpoints; see app/yahoo_session.py):
+  - Yahoo's chart endpoint: 1y daily closes, 52-week range position, the
+    200-day moving average gap.
   - Yahoo's quoteSummary endpoint (trailing/forward P/E, analyst mean
-    target): frequently gated behind cookies/crumbs, so treated as a bonus —
-    every field degrades to None and the recommender scores whatever is
-    available.
+    target): treated as a bonus even with a crumb — every field degrades
+    to None and the recommender scores whatever is available.
 
 Results are cached for 6 hours; fundamentals move slowly.
 """
@@ -16,9 +17,7 @@ import threading
 import time
 from typing import Dict, Optional
 
-import requests
-
-from . import config
+from . import yahoo_session
 
 log = logging.getLogger("fundamentals")
 
@@ -55,11 +54,9 @@ def get_history(symbol: str, range_: str = "1y") -> Optional[Dict]:
     """Daily close history + moving averages, for stats and charting.
     Returns {price, currency, timestamps, closes, dma50, dma200} or None."""
     try:
-        resp = requests.get(
+        resp = yahoo_session.get(
             _CHART_URL.format(symbol=symbol),
             params={"range": range_, "interval": "1d"},
-            headers={"User-Agent": config.USER_AGENT},
-            timeout=config.HTTP_TIMEOUT_SECONDS,
         )
         resp.raise_for_status()
         result = resp.json()["chart"]["result"][0]
@@ -91,7 +88,7 @@ def get_history(symbol: str, range_: str = "1y") -> Optional[Dict]:
             "dma200": rolling(200),
         }
     except Exception as exc:
-        log.debug("history %s failed: %s", symbol, exc)
+        log.warning("history %s failed: %s", symbol, exc)
         return None
 
 
@@ -112,11 +109,9 @@ def _fetch(symbol: str) -> Optional[Dict]:
         out["dma_gap_pct"] = round((price - dma) / dma * 100, 2)
 
     try:
-        resp = requests.get(
+        resp = yahoo_session.get(
             _SUMMARY_URL.format(symbol=symbol),
             params={"modules": "summaryDetail,financialData,defaultKeyStatistics"},
-            headers={"User-Agent": config.USER_AGENT},
-            timeout=config.HTTP_TIMEOUT_SECONDS,
         )
         resp.raise_for_status()
         modules = resp.json()["quoteSummary"]["result"][0]
@@ -137,6 +132,6 @@ def _fetch(symbol: str) -> Optional[Dict]:
         out["analyst_rating"] = raw("financialData", "recommendationMean")
         out["analyst_count"] = raw("financialData", "numberOfAnalystOpinions")
     except Exception as exc:
-        log.debug("quoteSummary %s failed: %s", symbol, exc)
+        log.warning("quoteSummary %s failed: %s", symbol, exc)
 
     return out or None

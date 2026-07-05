@@ -260,18 +260,19 @@ def test_quote_provider_selection_and_fallback(monkeypatch):
 
 
 def test_quote_shape_and_change_pct(monkeypatch):
-    from app import config, prices
+    from app import config, prices, yahoo_session
 
     monkeypatch.setattr(config, "QUOTE_PROVIDER", "yahoo")
 
     class _Resp:
+        status_code = 200
         def raise_for_status(self): pass
         def json(self):
             return {"chart": {"result": [{"meta": {
                 "regularMarketPrice": 110.0, "chartPreviousClose": 100.0,
                 "currency": "INR"}}]}}
 
-    monkeypatch.setattr(prices.requests, "get", lambda *a, **k: _Resp())
+    monkeypatch.setattr(yahoo_session, "get", lambda *a, **k: _Resp())
     prices._cache.clear()
     q = prices.get_quote("RELIANCE.NS")
     assert q == {"price": 110.0, "previous_close": 100.0, "currency": "INR", "change_pct": 10.0}

@@ -24,7 +24,7 @@ from typing import Callable, Dict, Optional
 
 import requests
 
-from . import config
+from . import config, yahoo_session
 
 log = logging.getLogger("prices")
 
@@ -97,16 +97,14 @@ _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 def _yahoo_quote(symbol: str) -> Optional[Quote]:
     try:
-        resp = requests.get(
+        resp = yahoo_session.get(
             _YAHOO_CHART_URL.format(symbol=symbol),
             params={"range": "1d", "interval": "5m"},
-            headers={"User-Agent": config.USER_AGENT},
-            timeout=config.HTTP_TIMEOUT_SECONDS,
         )
         resp.raise_for_status()
         meta = resp.json()["chart"]["result"][0]["meta"]
     except Exception as exc:
-        log.debug("yahoo quote %s failed: %s", symbol, exc)
+        log.warning("yahoo quote %s failed: %s", symbol, exc)
         return None
     prev = meta.get("chartPreviousClose") or meta.get("previousClose")
     return _mk_quote(meta.get("regularMarketPrice"), prev, meta.get("currency", "USD"))
