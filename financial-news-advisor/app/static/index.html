@@ -66,8 +66,24 @@
     background: var(--surface); color: var(--ink); border: 1px solid var(--border);
     border-radius: 6px; padding: 8px 10px; font: inherit; font-size: 14px;
   }
-  .add-row input#ticker-input { width: 110px; text-transform: uppercase; }
-  .add-row input#name-input { width: 220px; }
+  .add-row input#ticker-input { width: 130px; text-transform: uppercase; }
+  .add-row input#name-input { width: 200px; }
+  .search-wrap { position: relative; }
+  .search-wrap input { width: 220px; }
+  .search-dropdown {
+    position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px;
+    min-width: 260px; max-height: 260px; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.15);
+  }
+  .search-dropdown[hidden] { display: none; }
+  .search-result {
+    display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px;
+    cursor: pointer; font-size: 13.5px; border-bottom: 1px solid var(--grid);
+  }
+  .search-result:last-child { border-bottom: 0; }
+  .search-result:hover { background: var(--neutral-chip); }
+  .search-result .tk { color: var(--muted); font-size: 12px; }
   button {
     background: var(--accent); color: #fff; border: 0; border-radius: 6px;
     padding: 8px 14px; font: inherit; font-size: 14px; cursor: pointer;
@@ -247,6 +263,17 @@
     background: transparent; color: var(--accent); border: 1px solid var(--border);
     border-radius: 6px; padding: 2px 8px; font-size: 12px;
   }
+  .mini-remove {
+    background: transparent; color: var(--ink-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 7px; font-size: 12px;
+  }
+  .sector-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin: 4px 0 8px; }
+  .rating-filter {
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 12.5px;
+  }
+  .sector-add input { width: 200px; padding: 5px 8px; font-size: 12.5px; }
   /* --- news feed --- */
   .news-item {
     display: flex; gap: 10px; align-items: baseline; padding: 9px 2px;
@@ -281,7 +308,7 @@
   <div class="tilt-chips" id="tilts"></div>
 
   <nav class="toptabs" id="toptabs" role="tablist">
-    <button class="toptab" data-tab="portfolio" role="tab">Portfolio</button>
+    <button class="toptab" data-tab="portfolio" role="tab">Deep Analysis</button>
     <button class="toptab" data-tab="holdings" role="tab">Holdings</button>
     <button class="toptab" data-tab="scan" role="tab">Market Scan</button>
     <button class="toptab" data-tab="news" role="tab">News</button>
@@ -289,7 +316,11 @@
 
   <section class="tabpanel" id="panel-portfolio" data-tab="portfolio">
     <div class="add-row">
-      <input id="ticker-input" placeholder="Ticker (RELIANCE.NS)" maxlength="20">
+      <div class="search-wrap">
+        <input id="company-search" placeholder="Search company (e.g. Infosys)" autocomplete="off">
+        <div class="search-dropdown" id="company-search-results" hidden></div>
+      </div>
+      <input id="ticker-input" placeholder="or ticker (RELIANCE.NS)" maxlength="20">
       <input id="name-input" placeholder="Company name (optional)">
       <button id="add-btn">Add to portfolio</button>
       <button id="refresh-btn" class="ghost">Crawl now</button>
@@ -335,9 +366,15 @@
     <h2>Market scan — Nifty 50 &amp; sector baskets</h2>
     <p class="status-line">News-driven signals across the whole watch universe
       (AI &amp; emerging tech, IT services, data centers, energy &amp; power,
-      defence, Nifty 50), strongest first. Untick a sector to hide it here —
-      it stays fully valued if you hold one of its stocks directly.</p>
+      defence, Nifty 50, plus any custom sectors you create), strongest
+      first. Untick a sector to hide it here — it stays fully valued if you
+      hold one of its stocks directly.</p>
     <div class="sector-toggles" id="sector-toggles"></div>
+    <div class="add-row">
+      <input id="new-sector-input" placeholder="New sector name" style="width:200px">
+      <button id="new-sector-btn" class="ghost">+ New sector</button>
+    </div>
+    <p class="status-line" id="sector-line"></p>
     <div id="scan"></div>
   </section>
 
@@ -648,7 +685,7 @@ async function loadRecommendations() {
   const recs = data.recommendations || [];
   $("cards").innerHTML = recs.length
     ? recs.map(card).join("")
-    : `<p class="empty">Portfolio is empty — add a ticker above.</p>`;
+    : `<p class="empty">Deep Analysis is empty — search or enter a ticker above.</p>`;
   document.querySelectorAll(".remove").forEach(btn =>
     btn.addEventListener("click", () => removeTicker(btn.dataset.ticker)));
 }
@@ -666,7 +703,7 @@ async function loadNews() {
     </div>`).join("") || `<p class="empty">No articles yet — the crawler is warming up.</p>`;
 }
 
-function scanRow(r, inPortfolio) {
+function scanRow(r, inPortfolio, sector) {
   const sym = splitSymbol(r.ticker);
   const price = r.current_price == null
     ? moveLabel(r.implied_move_pct, "")
@@ -675,7 +712,11 @@ function scanRow(r, inPortfolio) {
   const addBtn = inPortfolio.has(r.ticker)
     ? `<span class="chip">in portfolio</span>`
     : `<button class="mini-add" data-ticker="${esc(r.ticker)}" data-name="${esc(r.name || "")}">+ add</button>`;
-  return `<div class="scan-row">
+  const customBits = r.custom
+    ? `<span class="chip">added</span><button class="mini-remove" data-sector="${esc(sector)}"
+        data-ticker="${esc(r.ticker)}" title="Remove from this sector">✕</button>`
+    : "";
+  return `<div class="scan-row" data-action="${esc(r.action)}">
       <span class="sym">${esc(sym.base)} <span class="exch">${sym.exch}</span></span>
       <span class="co">${esc(r.name || "")}</span>
       ${badgeFor(r.action)}
@@ -683,6 +724,7 @@ function scanRow(r, inPortfolio) {
         conf ${Math.round(r.confidence * 100)}% · ${r.news_count} news</span>
       <span class="nums">${price}</span>
       ${addBtn}
+      ${customBits}
     </div>
     ${top ? `<a class="scan-head" href="${esc(top.link)}" target="_blank" rel="noopener">↳ ${esc(top.title)}</a>` : ""}`;
 }
@@ -693,11 +735,25 @@ async function loadScan() {
   const data = await scanRes.json();
   const inPortfolio = new Set(((await pfRes.json()).holdings || []).map(h => h.ticker));
   $("scan").innerHTML = (data.sectors || []).map(s => `
-    <div class="sector">
-      <h3>${esc(s.sector)} <span class="cnt">· ${s.with_news} of ${s.watched} watched have news</span></h3>
-      ${s.results.length ? s.results.map(r => scanRow(r, inPortfolio)).join("")
+    <div class="sector" data-sector="${esc(s.sector)}">
+      <h3>${esc(s.sector)} ${s.is_custom ? `<span class="chip">custom</span>` : ""}
+        <span class="cnt">· ${s.with_news} of ${s.watched} watched have news</span></h3>
+      <div class="sector-controls">
+        <select class="rating-filter">
+          <option value="all">All ratings</option>
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+          <option value="hold">Hold</option>
+        </select>
+        <div class="search-wrap sector-add">
+          <input class="sector-search" placeholder="Add company to this sector" autocomplete="off">
+          <div class="search-dropdown sector-search-results" hidden></div>
+        </div>
+      </div>
+      ${s.results.length ? s.results.map(r => scanRow(r, inPortfolio, s.sector)).join("")
         : `<p class="empty">No news signals in the window yet.</p>`}
     </div>`).join("");
+
   document.querySelectorAll(".mini-add").forEach(btn =>
     btn.addEventListener("click", async () => {
       btn.disabled = true;
@@ -708,6 +764,39 @@ async function loadScan() {
       });
       await refreshAll();
     }));
+
+  document.querySelectorAll(".mini-remove").forEach(btn =>
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      await fetch(`/api/sectors/members/${encodeURIComponent(btn.dataset.sector)}/${encodeURIComponent(btn.dataset.ticker)}`,
+        { method: "DELETE" });
+      await loadScan();
+    }));
+
+  document.querySelectorAll(".rating-filter").forEach(sel =>
+    sel.addEventListener("change", () => {
+      const filter = sel.value;
+      sel.closest(".sector").querySelectorAll(".scan-row").forEach(row => {
+        const action = (row.dataset.action || "").toLowerCase();
+        const match = filter === "all" || action.includes(filter);
+        row.style.display = match ? "" : "none";
+        const next = row.nextElementSibling;
+        if (next && next.classList.contains("scan-head")) next.style.display = match ? "" : "none";
+      });
+    }));
+
+  document.querySelectorAll(".sector-search").forEach(input => {
+    const sector = input.closest(".sector").dataset.sector;
+    const results = input.closest(".sector-add").querySelector(".sector-search-results");
+    wireCompanySearch(input, results, async ({ ticker, name }) => {
+      await fetch("/api/sectors/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sector, ticker, name }),
+      });
+      await loadScan();
+    });
+  });
 }
 
 async function loadStatus() {
@@ -744,6 +833,56 @@ async function addTicker() {
     $("add-btn").disabled = false;
   }
 }
+
+// Debounced company-name search, reused by Deep Analysis and Market Scan's
+// per-sector add box (the latter re-wires on every loadScan() re-render, so
+// this deliberately avoids any document-level listener — that would leak
+// one per refresh cycle, each pinned to a detached DOM node). onSelect
+// fires when a result is picked; the input and dropdown are cleared after.
+function wireCompanySearch(inputEl, resultsEl, onSelect) {
+  let debounce = null;
+  inputEl.addEventListener("input", () => {
+    clearTimeout(debounce);
+    const q = inputEl.value.trim();
+    if (!q) { resultsEl.hidden = true; resultsEl.innerHTML = ""; return; }
+    debounce = setTimeout(async () => {
+      const data = await (await fetch(`/api/companies/search?q=${encodeURIComponent(q)}`)).json();
+      const results = data.results || [];
+      resultsEl.innerHTML = results.map(r => `
+        <div class="search-result" data-ticker="${esc(r.ticker)}" data-name="${esc(r.name)}">
+          <span>${esc(r.name)}</span><span class="tk">${esc(r.ticker)}</span>
+        </div>`).join("") || `<div class="search-result">No matches</div>`;
+      resultsEl.hidden = false;
+      resultsEl.querySelectorAll(".search-result[data-ticker]").forEach(row =>
+        row.addEventListener("mousedown", e => {
+          e.preventDefault(); // keep the input focused so this fires before blur hides the dropdown
+          inputEl.value = ""; resultsEl.hidden = true; resultsEl.innerHTML = "";
+          onSelect({ ticker: row.dataset.ticker, name: row.dataset.name });
+        }));
+    }, 250);
+  });
+  inputEl.addEventListener("blur", () => { resultsEl.hidden = true; });
+}
+
+wireCompanySearch($("company-search"), $("company-search-results"), async ({ ticker, name }) => {
+  $("add-btn").disabled = true;
+  try {
+    const res = await fetch("/api/portfolio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker, name }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail?.[0]?.msg || "failed");
+    $("action-line").textContent = `${ticker} added — crawling its news feed…`;
+    await fetch("/api/crawl", { method: "POST" });
+    await refreshAll();
+    $("action-line").textContent = "";
+  } catch (e) {
+    $("action-line").textContent = `Could not add ${ticker}: ${e.message}`;
+  } finally {
+    $("add-btn").disabled = false;
+  }
+});
 
 async function removeTicker(ticker) {
   await fetch(`/api/portfolio/${encodeURIComponent(ticker)}`, { method: "DELETE" });
@@ -855,7 +994,7 @@ async function checkAuth() {
     $("profile").value = me.risk_profile;
   }
   hiddenSectors = new Set(me.hidden_sectors || []);
-  renderSectorToggles(me.available_sectors || []);
+  renderSectorToggles([...(me.available_sectors || []), ...(me.custom_sectors || [])]);
   return true;
 }
 
@@ -902,6 +1041,31 @@ $("logout-btn").addEventListener("click", async () => {
   location.reload();
 });
 $("upload-btn").addEventListener("click", uploadHoldings);
+
+async function createSector() {
+  const name = $("new-sector-input").value.trim();
+  if (!name) return;
+  $("new-sector-btn").disabled = true;
+  try {
+    const res = await fetch("/api/sectors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "failed");
+    $("new-sector-input").value = "";
+    $("sector-line").textContent = "";
+    await checkAuth();
+    await loadScan();
+  } catch (e) {
+    $("sector-line").textContent = `Could not create sector: ${e.message}`;
+  } finally {
+    $("new-sector-btn").disabled = false;
+  }
+}
+$("new-sector-btn").addEventListener("click", createSector);
+$("new-sector-input").addEventListener("keydown", e => { if (e.key === "Enter") createSector(); });
 
 async function refreshAll() {
   await Promise.allSettled([loadStatus(), loadMacro(), loadRecommendations(),

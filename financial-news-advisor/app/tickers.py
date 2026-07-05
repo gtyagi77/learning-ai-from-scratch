@@ -323,3 +323,31 @@ def extract_tickers(text: str, universe: Iterable[str], extra_names: Dict[str, s
             found.add(symbol)
 
     return sorted(found)
+
+
+def search_companies(query: str, limit: int = 15) -> List[Dict[str, str]]:
+    """Look up companies by (partial) name for interactive add-by-search UIs.
+
+    Prefers the watch universe's proper display names; falls back to a
+    title-cased COMPANY_MAP alias for tickers only known by alias (mostly
+    US large caps, or NSE names outside the curated sector baskets).
+    """
+    q = (query or "").strip().lower()
+    if not q:
+        return []
+    from . import universe as _universe  # local import: keeps this a leaf
+
+    candidates: Dict[str, str] = {}
+    for ticker, name in _universe.WATCHLIST.items():
+        candidates[ticker] = name
+    for alias, ticker in COMPANY_MAP.items():
+        candidates.setdefault(ticker, alias.title())
+
+    starts, contains = [], []
+    for ticker, name in candidates.items():
+        if name.lower().startswith(q) or ticker.lower().startswith(q):
+            starts.append((ticker, name))
+        elif q in name.lower():
+            contains.append((ticker, name))
+    results = sorted(starts) + sorted(contains)
+    return [{"ticker": t, "name": n} for t, n in results[:limit]]

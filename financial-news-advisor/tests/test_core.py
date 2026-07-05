@@ -531,6 +531,27 @@ def test_universe_is_well_formed():
     assert universe.WATCHLIST["RELIANCE.NS"] == "Reliance Industries"
 
 
+def test_search_companies_prefix_beats_substring():
+    results = tickers.search_companies("tata")
+    names = [r["name"] for r in results]
+    # Prefix matches ("Tata Motors", "Tata Elxsi"...) all come before any
+    # substring-only match (e.g. a name that merely contains "tata").
+    assert all(n.lower().startswith("tata") for n in names[:3])
+    tickers_seen = [r["ticker"] for r in results]
+    assert len(tickers_seen) == len(set(tickers_seen))  # deduped
+
+
+def test_search_companies_empty_and_unknown_query():
+    assert tickers.search_companies("") == []
+    assert tickers.search_companies("   ") == []
+    assert tickers.search_companies("zzzznotarealcompany") == []
+
+
+def test_search_companies_matches_ticker_prefix():
+    results = tickers.search_companies("reliance")
+    assert results and results[0]["ticker"] == "RELIANCE.NS"
+
+
 def test_scan_universe_ranks_newsy_tickers(monkeypatch):
     from app import prices, recommender
 
@@ -562,12 +583,54 @@ def test_scan_universe_ranks_newsy_tickers(monkeypatch):
 
 
 def test_scan_universe_respects_hidden_sectors():
-    from app import recommender
+    from app import recommender, universe
 
-    hidden = {s["sector"] for s in recommender.scan_universe(hidden_sectors={"IT Services"})}
+    filtered = {name: members for name, members in universe.SECTORS.items()
+                if name != "IT Services"}
+    hidden = {s["sector"] for s in recommender.scan_universe(sectors=filtered)}
     assert "IT Services" not in hidden
     shown = {s["sector"] for s in recommender.scan_universe()}
     assert "IT Services" in shown
+
+
+def test_scan_universe_flags_extra_members_as_custom(monkeypatch):
+    from app import prices, recommender, universe
+
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    now = time.time()
+    database.insert_article(
+        "Test", "HAL wins record fighter jet order, shares surge",
+        "https://example.com/hal-custom", "Strong order book.", now - 900,
+        0.8, ["HAL.NS"],
+    )
+    database.insert_article(
+        "Test", "Widget Corp swings to profit, shares rally",
+        "https://example.com/widget-custom", "Strong quarter.", now - 900,
+        0.6, ["WIDGETCO"],
+    )
+    sectors = dict(universe.SECTORS)
+    sectors["Defence"] = sectors["Defence"] + [("WIDGETCO", "Widget Corp")]
+    results = {s["sector"]: s for s in recommender.scan_universe(
+        sectors=sectors, custom_symbols={"Defence": {"WIDGETCO"}})}
+    by_ticker = {r["ticker"]: r for r in results["Defence"]["results"]}
+    assert by_ticker["HAL.NS"]["custom"] is False
+    assert by_ticker["WIDGETCO"]["custom"] is True
+
+
+def test_scan_universe_supports_a_wholly_custom_sector(monkeypatch):
+    from app import prices, recommender
+
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    now = time.time()
+    database.insert_article(
+        "Test", "Widget Corp swings to profit, shares rally",
+        "https://example.com/widget-custom2", "Strong quarter.", now - 900,
+        0.6, ["WIDGETCO"],
+    )
+    results = {s["sector"]: s for s in recommender.scan_universe(
+        sectors={"My Watchlist": [("WIDGETCO", "Widget Corp")]})}
+    assert results["My Watchlist"]["watched"] == 1
+    assert results["My Watchlist"]["results"][0]["ticker"] == "WIDGETCO"
 
 
 def test_sector_pe_for_it_services_is_not_default():

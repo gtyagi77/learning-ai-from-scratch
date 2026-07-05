@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from . import config
 
@@ -75,6 +75,21 @@ def init(db_path: Optional[str] = None) -> None:
                 created_ts REAL NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_lots_user ON lots(user_id, ticker);
+            CREATE TABLE IF NOT EXISTS custom_sectors (
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                created_ts REAL NOT NULL,
+                PRIMARY KEY (user_id, name)
+            );
+            CREATE TABLE IF NOT EXISTS sector_members (
+                user_id INTEGER NOT NULL,
+                sector TEXT NOT NULL,
+                ticker TEXT NOT NULL,
+                name TEXT,
+                added_ts REAL NOT NULL,
+                PRIMARY KEY (user_id, sector, ticker)
+            );
+            CREATE INDEX IF NOT EXISTS idx_sector_members_user ON sector_members(user_id);
             """
         )
         # Migrations for databases created before these columns existed.
@@ -284,6 +299,63 @@ def set_hidden_sectors(user_id: int, sectors: List[str]) -> None:
         _conn.execute("UPDATE users SET hidden_sectors = ? WHERE id = ?",
                       (json.dumps(sectors), user_id))
         _conn.commit()
+
+
+def create_custom_sector(user_id: int, name: str) -> None:
+    with _lock:
+        _conn.execute(
+            "INSERT OR IGNORE INTO custom_sectors (user_id, name, created_ts) "
+            "VALUES (?, ?, ?)", (user_id, name, time.time()))
+        _conn.commit()
+
+
+def get_custom_sectors(user_id: int) -> List[str]:
+    with _lock:
+        rows = _conn.execute(
+            "SELECT name FROM custom_sectors WHERE user_id = ? ORDER BY created_ts",
+            (user_id,)).fetchall()
+    return [r["name"] for r in rows]
+
+
+def delete_custom_sector(user_id: int, name: str) -> bool:
+    with _lock:
+        cur = _conn.execute(
+            "DELETE FROM custom_sectors WHERE user_id = ? AND name = ?",
+            (user_id, name))
+        _conn.execute(
+            "DELETE FROM sector_members WHERE user_id = ? AND sector = ?",
+            (user_id, name))
+        _conn.commit()
+    return cur.rowcount > 0
+
+
+def add_sector_member(user_id: int, sector: str, ticker: str, name: Optional[str]) -> None:
+    with _lock:
+        _conn.execute(
+            "INSERT OR REPLACE INTO sector_members "
+            "(user_id, sector, ticker, name, added_ts) VALUES (?, ?, ?, ?, ?)",
+            (user_id, sector, ticker, name, time.time()))
+        _conn.commit()
+
+
+def remove_sector_member(user_id: int, sector: str, ticker: str) -> bool:
+    with _lock:
+        cur = _conn.execute(
+            "DELETE FROM sector_members WHERE user_id = ? AND sector = ? AND ticker = ?",
+            (user_id, sector, ticker))
+        _conn.commit()
+    return cur.rowcount > 0
+
+
+def get_sector_members(user_id: int) -> Dict[str, List[Tuple[str, str]]]:
+    with _lock:
+        rows = _conn.execute(
+            "SELECT sector, ticker, name FROM sector_members "
+            "WHERE user_id = ? ORDER BY sector, added_ts", (user_id,)).fetchall()
+    out: Dict[str, List[Tuple[str, str]]] = {}
+    for r in rows:
+        out.setdefault(r["sector"], []).append((r["ticker"], r["name"] or r["ticker"]))
+    return out
 
 
 def adopt_orphan_portfolio(user_id: int) -> None:

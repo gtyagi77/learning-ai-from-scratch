@@ -98,6 +98,12 @@ browser ◀── FastAPI dashboard ◀── recommender (recency-weighted    �
    directly is still scored against its real sector P/E and macro
    sensitivity even if that sector is hidden. Index membership changes over
    time — the lists are plain data in `universe.py`, edit them there.
+   You can also **search and add** any company (by name, via
+   `GET /api/companies/search`) into a curated sector, or **create your own
+   custom sectors** with their own hand-picked companies — both are private
+   to your account, distinguished from the curated baskets with a "custom"
+   badge (sector-level) or an "added" chip + remove button (per-company),
+   and each sector has its own BUY/SELL/HOLD rating filter.
 5. **Recommender** (`app/recommender.py`) — ratings blend four components,
    weighted by your risk profile (balanced 35/25/25/15, conservative,
    aggressive), renormalized over whatever data resolves:
@@ -148,9 +154,10 @@ that changes the public hostname (uncommon). Leaving it at its localhost
 default while deployed is the #1 cause of `redirect_uri_mismatch` errors
 from Google, and is no longer a way you can get bitten by that.
 
-**Dashboard layout:** four tabs — **Portfolio** (add tickers, recommendation
-cards, risk profile), **Holdings** (CSV upload, P&L, tax), **Market Scan**
-(sector baskets), **News** (defaults to articles that mention a tracked
+**Dashboard layout:** four tabs — **Deep Analysis** (search or type a ticker
+to add, recommendation cards, risk profile), **Holdings** (CSV upload, P&L,
+tax), **Market Scan** (sector baskets, custom sectors, per-sector search-add
+and rating filter), **News** (defaults to articles that mention a tracked
 stock; check "Show all market news" to also see untagged macro/economy
 pieces). The macro strip stays visible above all tabs.
 

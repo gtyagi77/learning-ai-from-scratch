@@ -242,3 +242,95 @@ def test_set_hidden_sectors_endpoint_filters_scan():
     client.post("/api/sectors/hidden", json={"hidden": []})
     scan = client.get("/api/scan").json()
     assert "IT Services" in {s["sector"] for s in scan["sectors"]}
+
+
+def test_custom_sectors_and_members_db_round_trip():
+    user, _ = auth.register("customsectors@test.local", "longenough1", None)
+    uid = user["id"]
+    assert database.get_custom_sectors(uid) == []
+    database.create_custom_sector(uid, "My Watchlist")
+    assert database.get_custom_sectors(uid) == ["My Watchlist"]
+
+    database.add_sector_member(uid, "My Watchlist", "ZOMATO.NS", "Zomato")
+    database.add_sector_member(uid, "IT Services", "PERSISTENT.NS", "Persistent Systems")
+    members = database.get_sector_members(uid)
+    assert members["My Watchlist"] == [("ZOMATO.NS", "Zomato")]
+    assert members["IT Services"] == [("PERSISTENT.NS", "Persistent Systems")]
+
+    assert database.remove_sector_member(uid, "IT Services", "PERSISTENT.NS") is True
+    assert database.remove_sector_member(uid, "IT Services", "PERSISTENT.NS") is False
+    assert "IT Services" not in database.get_sector_members(uid)
+
+    # Deleting a custom sector cascades its members.
+    assert database.delete_custom_sector(uid, "My Watchlist") is True
+    assert database.get_custom_sectors(uid) == []
+    assert database.get_sector_members(uid) == {}
+
+
+def test_search_companies_endpoint():
+    client = make_authed_client()
+    r = client.get("/api/companies/search", params={"q": "infosys"})
+    assert r.status_code == 200
+    results = r.json()["results"]
+    assert any(x["ticker"] == "INFY.NS" for x in results)
+
+
+def test_create_and_delete_custom_sector_endpoint():
+    client = make_authed_client()
+    r = client.post("/api/sectors", json={"name": "My Watchlist"})
+    assert r.status_code == 200 and r.json()["name"] == "My Watchlist"
+
+    # Duplicate (case-insensitive) and curated names are rejected.
+    assert client.post("/api/sectors", json={"name": "my watchlist"}).status_code == 400
+    assert client.post("/api/sectors", json={"name": "Nifty 50"}).status_code == 400
+    assert client.post("/api/sectors", json={"name": "  "}).status_code == 400
+
+    assert client.delete("/api/sectors/My Watchlist").status_code == 200
+    # Curated sectors can't be deleted through this endpoint.
+    assert client.delete("/api/sectors/Nifty 50").status_code == 404
+
+
+def test_sector_members_endpoint_add_remove_and_validation():
+    client = make_authed_client()
+    client.post("/api/sectors", json={"name": "My Watchlist"})
+
+    r = client.post("/api/sectors/members",
+                    json={"sector": "My Watchlist", "ticker": "reliance", "name": "Reliance"})
+    assert r.status_code == 200
+
+    # Curated sectors accept additions too.
+    r2 = client.post("/api/sectors/members",
+                     json={"sector": "IT Services", "ticker": "PERSISTENT.NS"})
+    assert r2.status_code == 200
+
+    assert client.post("/api/sectors/members",
+                       json={"sector": "Not A Sector", "ticker": "TCS.NS"}).status_code == 400
+    assert client.post("/api/sectors/members",
+                       json={"sector": "My Watchlist", "ticker": "BAD TICKER!"}).status_code == 422
+
+    assert client.delete("/api/sectors/members/My Watchlist/RELIANCE.NS").status_code == 200
+    assert client.delete("/api/sectors/members/My Watchlist/RELIANCE.NS").status_code == 404
+
+
+def test_scan_reflects_custom_sector_and_added_member(monkeypatch):
+    import time as _time
+
+    from app import prices
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+
+    client = make_authed_client()
+    client.post("/api/sectors", json={"name": "My Watchlist"})
+    client.post("/api/sectors/members",
+               json={"sector": "My Watchlist", "ticker": "WIDGETCO", "name": "Widget Corp"})
+    client.post("/api/sectors/members",
+               json={"sector": "Defence", "ticker": "GADGETCO", "name": "Gadget Corp"})
+    database.insert_article("Test", "Gadget Corp swings to profit, shares rally",
+                            "https://example.com/gadgetco", "", _time.time() - 600, 0.6,
+                            ["GADGETCO"])
+
+    scan = client.get("/api/scan").json()["sectors"]
+    by_name = {s["sector"]: s for s in scan}
+    assert by_name["My Watchlist"]["is_custom"] is True
+    assert by_name["My Watchlist"]["watched"] == 1
+    defence_rows = {r["ticker"]: r for r in by_name["Defence"]["results"]}
+    assert defence_rows["GADGETCO"]["custom"] is True

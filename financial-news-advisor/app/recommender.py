@@ -528,16 +528,19 @@ def recommend_portfolio_for_user(user_id: int,
 
 
 def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced",
-                  hidden_sectors: Optional[Iterable[str]] = None) -> List[Dict]:
+                  sectors: Optional[Dict[str, List[Tuple[str, str]]]] = None,
+                  custom_symbols: Optional[Dict[str, Iterable[str]]] = None) -> List[Dict]:
     """Scan the watch universe; financials are cache-only here so a 100+
-    symbol sweep never triggers a screener crawl. hidden_sectors lets a
-    caller drop sectors a user has hidden from their Market Scan view."""
-    hidden = set(hidden_sectors or ())
+    symbol sweep never triggers a screener crawl. sectors overrides the
+    default full universe.SECTORS (used to apply a user's hidden/added/
+    custom sectors). custom_symbols flags, per curated sector, which
+    tickers were user-added rather than part of the curated basket."""
+    sectors = universe.SECTORS if sectors is None else sectors
+    custom_symbols = custom_symbols or {}
     cache: Dict[str, Dict] = {}
-    sectors = []
-    for sector, members in universe.SECTORS.items():
-        if sector in hidden:
-            continue
+    out = []
+    for sector, members in sectors.items():
+        custom_here = set(custom_symbols.get(sector, ()))
         rows = []
         seen = set()
         for symbol, name in members:
@@ -551,12 +554,14 @@ def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced",
                                            allow_financials_fetch=False)
                 cache[symbol] = rec
             if rec["news_count"] > 0:
-                rows.append(rec)
+                row = dict(rec)
+                row["custom"] = symbol in custom_here
+                rows.append(row)
         rows.sort(key=lambda r: abs(r["signal"]), reverse=True)
-        sectors.append({
+        out.append({
             "sector": sector,
             "watched": len(members),
             "with_news": len(rows),
             "results": rows[:max_per_sector],
         })
-    return sectors
+    return out
