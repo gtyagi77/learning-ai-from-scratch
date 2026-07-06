@@ -259,6 +259,62 @@ def test_quote_provider_selection_and_fallback(monkeypatch):
     assert prices.get_quote("RELIANCE.NS") == sentinel
 
 
+def test_breeze_provider_selection_and_quote_shape(monkeypatch):
+    from app import config, prices
+
+    # Missing any of the three creds -> effective provider is Yahoo.
+    monkeypatch.setattr(config, "QUOTE_PROVIDER", "breeze")
+    monkeypatch.setattr(config, "BREEZE_API_KEY", "")
+    monkeypatch.setattr(config, "BREEZE_API_SECRET", "")
+    monkeypatch.setattr(config, "BREEZE_SESSION_TOKEN", "")
+    assert prices.active_provider() == "yahoo"
+
+    monkeypatch.setattr(config, "BREEZE_API_KEY", "k")
+    monkeypatch.setattr(config, "BREEZE_API_SECRET", "s")
+    monkeypatch.setattr(config, "BREEZE_SESSION_TOKEN", "t")
+    assert prices.active_provider() == "breeze"
+
+    class FakeClient:
+        def get_quotes(self, **kwargs):
+            assert kwargs["stock_code"] == "RELIND"
+            assert kwargs["exchange_code"] == "NSE"
+            return {"Success": [{"ltp": 1357.08, "previous_close": 1340.0}]}
+
+    monkeypatch.setattr(prices, "_breeze_session", lambda: FakeClient())
+    monkeypatch.setattr(prices, "_load_instrument_map", lambda: {"RELIANCE.NS": "RELIND"})
+    prices._cache.clear()
+    quote = prices.get_quote("RELIANCE.NS")
+    assert quote == {"price": 1357.08, "previous_close": 1340.0,
+                     "currency": "INR", "change_pct": 1.27}
+
+
+def test_breeze_quote_falls_back_to_yahoo_when_symbol_unmapped(monkeypatch):
+    from app import config, prices
+
+    monkeypatch.setattr(config, "QUOTE_PROVIDER", "breeze")
+    monkeypatch.setattr(config, "BREEZE_API_KEY", "k")
+    monkeypatch.setattr(config, "BREEZE_API_SECRET", "s")
+    monkeypatch.setattr(config, "BREEZE_SESSION_TOKEN", "t")
+    monkeypatch.setattr(prices, "_load_instrument_map", lambda: {})  # no mapping
+    sentinel = {"price": 100.0, "previous_close": 98.0, "currency": "INR", "change_pct": 2.04}
+    monkeypatch.setattr(prices, "_yahoo_quote", lambda s: sentinel)
+    prices._cache.clear()
+    assert prices.get_quote("RELIANCE.NS") == sentinel
+
+
+def test_build_breeze_map_skips_unresolvable_symbols():
+    from app import instruments
+
+    class FakeClient:
+        def get_names(self, exchange_code, stock_code):
+            if stock_code == "RELIANCE":
+                return {"isec_stock_code": "RELIND"}
+            raise Exception("ISEC_NSE_STOCK_MAP_EXCEPTION")
+
+    mapping = instruments.build_breeze_map(FakeClient(), ["RELIANCE.NS", "UNKNOWNCO.NS"])
+    assert mapping == {"RELIANCE.NS": "RELIND"}
+
+
 def test_quote_shape_and_change_pct(monkeypatch):
     from app import config, prices, yahoo_session
 

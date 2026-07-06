@@ -429,7 +429,12 @@ def recommend_for_ticker(ticker: str, name: Optional[str] = None,
     quote = prices.get_quote(ticker) if (
         quote_mode == "always" or (quote_mode == "auto" and articles)) else None
     price = quote["price"] if quote else (funda or {}).get("price")
-    currency = quote["currency"] if quote else (funda or {}).get("currency")
+    # Yahoo's quote/fundamentals endpoints can both fail (crumb/session
+    # blocked) while other sources still work -- the ticker's own exchange
+    # suffix already tells us the currency unambiguously, so fall back to
+    # that instead of leaving it None (which the frontend renders as "$").
+    currency = ((quote or {}).get("currency") or (funda or {}).get("currency")
+                or ("INR" if ticker.endswith((".NS", ".BO")) else "USD"))
 
     if fair_value:
         target_price = round(fair_value * (1 + news_sig * 0.03), 2)

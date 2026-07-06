@@ -155,6 +155,20 @@ def test_horizons_have_dates_and_targets(monkeypatch):
     assert any("results" in r for r in strat["review"])
 
 
+def test_currency_falls_back_to_ticker_suffix_when_quote_and_funda_unavailable(monkeypatch):
+    from app import fundamentals, prices
+
+    monkeypatch.setattr(prices, "get_quote", lambda s: None)
+    monkeypatch.setattr(fundamentals, "get_fundamentals", lambda s: None)
+
+    rec = recommender.recommend_for_ticker("GRANITE.NS")
+    assert rec["current_price"] is None
+    assert rec["currency"] == "INR"
+
+    rec_us = recommender.recommend_for_ticker("GRANITECORP")
+    assert rec_us["currency"] == "USD"
+
+
 def test_news_relevant_only_filters_untagged_articles():
     from tests.conftest import make_authed_client
 
