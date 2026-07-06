@@ -138,6 +138,12 @@
   .chip.pos { color: var(--good-text); }
   .chip.neg { color: var(--critical-text); }
   .empty { color: var(--muted); font-size: 13px; }
+  .spinner {
+    display: inline-block; width: 12px; height: 12px; margin-right: 6px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; vertical-align: -2px; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   /* --- macro strip --- */
   .macro-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
   .macro-tile {
@@ -710,6 +716,10 @@ async function openDetail(ticker) {
 window.openDetail = openDetail;
 
 async function loadRecommendations() {
+  const hasCards = $("cards").children.length > 0;
+  if (!hasCards) {
+    $("cards").innerHTML = `<p class="empty"><span class="spinner"></span>Loading recommendations — this can take a while for large portfolios…</p>`;
+  }
   const res = await fetch(`/api/recommendations?profile=${profileSel()}`);
   const data = await res.json();
   const recs = data.recommendations || [];
@@ -948,6 +958,10 @@ async function crawlNow(btnId = "refresh-btn", lineId = "action-line") {
 }
 
 async function loadHoldings() {
+  const hasTable = $("holdings-table").querySelector("table") !== null;
+  if (!hasTable) {
+    $("holdings-table").innerHTML = `<p class="empty"><span class="spinner"></span>Loading holdings…</p>`;
+  }
   const res = await fetch("/api/holdings");
   if (!res.ok) return;
   const data = await res.json();
@@ -967,7 +981,7 @@ async function loadHoldings() {
     tile("Current value", s.current_value != null ? fmtMoney(s.current_value, "INR") : "—") +
     tile("Unrealized P&L", g != null ? `${g >= 0 ? "+" : "−"}${fmtMoney(Math.abs(g), "INR")}` : "—", g >= 0 ? "up" : "down") +
     tile("Tax if all sold today", s.tax_if_all_sold_today != null ? fmtMoney(s.tax_if_all_sold_today, "INR") : "—") +
-    tile("LTCG exemption used", fmtMoney(s.ltcg_exemption_applied ?? 0, "INR"));
+    tile("LTCG exemption used", s.ltcg_exemption_applied != null ? fmtMoney(s.ltcg_exemption_applied, "INR") : "—");
   const rows = positions.map(p => {
     const sym = splitSymbol(p.ticker);
     const g = p.unrealized_gain;

@@ -108,11 +108,16 @@ YAHOO_TICKER_FEED_TEMPLATE = (
 #                       needs UPSTOX_ACCESS_TOKEN.
 #   "angelone"        — Angel One SmartAPI (free, real-time); needs
 #                       ANGELONE_API_KEY / ANGELONE_ACCESS_TOKEN.
+#   "breeze"          — ICICI Direct Breeze API (free, real-time); needs
+#                       BREEZE_API_KEY / BREEZE_API_SECRET / BREEZE_SESSION_TOKEN.
 # Providers that need credentials fall back to Yahoo when unconfigured.
 QUOTE_PROVIDER = os.environ.get("QUOTE_PROVIDER", "yahoo").lower()
 UPSTOX_ACCESS_TOKEN = os.environ.get("UPSTOX_ACCESS_TOKEN", "")
 ANGELONE_API_KEY = os.environ.get("ANGELONE_API_KEY", "")
 ANGELONE_ACCESS_TOKEN = os.environ.get("ANGELONE_ACCESS_TOKEN", "")
+BREEZE_API_KEY = os.environ.get("BREEZE_API_KEY", "")
+BREEZE_API_SECRET = os.environ.get("BREEZE_API_SECRET", "")
+BREEZE_SESSION_TOKEN = os.environ.get("BREEZE_SESSION_TOKEN", "")
 
 # Tickers seeded into the portfolio on first run so the dashboard has
 # something to show; the user can remove them freely. All-Indian defaults —

@@ -7,6 +7,9 @@ Providers (selected by config.QUOTE_PROVIDER):
                  needs UPSTOX_ACCESS_TOKEN and an instrument-key map.
   - "angelone" : Angel One SmartAPI. Free, real-time, official — needs an API
                  key + access token and a symbol-token map.
+  - "breeze"   : ICICI Direct Breeze API. Free, real-time, official — needs
+                 an API key/secret + a session token (regenerated daily) and
+                 a symbol -> ISEC stock-code map.
 
 Every provider returns the same shape — {price, previous_close, currency,
 change_pct} or None — so the rest of the app is provider-agnostic. A broker
@@ -60,6 +63,9 @@ def active_provider() -> str:
     if provider == "upstox" and not config.UPSTOX_ACCESS_TOKEN:
         return "yahoo"
     if provider == "angelone" and not (config.ANGELONE_API_KEY and config.ANGELONE_ACCESS_TOKEN):
+        return "yahoo"
+    if provider == "breeze" and not (config.BREEZE_API_KEY and config.BREEZE_API_SECRET
+                                     and config.BREEZE_SESSION_TOKEN):
         return "yahoo"
     return provider if provider in _PROVIDERS else "yahoo"
 
@@ -196,8 +202,58 @@ def _angelone_quote(symbol: str) -> Optional[Quote]:
     return _mk_quote(d.get("ltp"), d.get("close"), "INR")
 
 
+# --------------------------------------------------------------------------
+# ICICI Direct Breeze (free, real-time, official)
+# --------------------------------------------------------------------------
+# The Breeze auth scheme is an HMAC checksum (sha256 of timestamp + json body
+# + secret) rather than a plain bearer token, so this uses the vendor's own
+# breeze-connect SDK instead of hand-rolling it. Importing that package has a
+# side effect (it downloads ICICI's public security-master zip at import
+# time), so it's imported lazily here and any failure just means the
+# provider stays unavailable -> falls back to Yahoo, same as an unconfigured
+# broker.
+
+_breeze_client = None  # None = not yet tried, False = tried and failed
+
+
+def _breeze_session():
+    global _breeze_client
+    if _breeze_client is not None:
+        return _breeze_client or None
+    if not (config.BREEZE_API_KEY and config.BREEZE_API_SECRET and config.BREEZE_SESSION_TOKEN):
+        _breeze_client = False
+        return None
+    try:
+        from breeze_connect import BreezeConnect
+        client = BreezeConnect(api_key=config.BREEZE_API_KEY)
+        client.generate_session(api_secret=config.BREEZE_API_SECRET,
+                                session_token=config.BREEZE_SESSION_TOKEN)
+    except Exception as exc:
+        log.warning("breeze session init failed: %s", exc)
+        client = False
+    _breeze_client = client
+    return client or None
+
+
+def _breeze_quote(symbol: str) -> Optional[Quote]:
+    code = _load_instrument_map().get(symbol)
+    client = _breeze_session()
+    if not code or not client:
+        return None  # -> caller falls back to Yahoo
+    try:
+        resp = client.get_quotes(stock_code=code, exchange_code="NSE",
+                                 product_type="cash", expiry_date="",
+                                 right="", strike_price="")
+        data = resp["Success"][0]
+    except Exception as exc:
+        log.debug("breeze quote %s failed: %s", symbol, exc)
+        return None
+    return _mk_quote(data.get("ltp"), data.get("previous_close"), "INR")
+
+
 _PROVIDERS: Dict[str, Callable[[str], Optional[Quote]]] = {
     "yahoo": _yahoo_quote,
     "upstox": _upstox_quote,
     "angelone": _angelone_quote,
+    "breeze": _breeze_quote,
 }

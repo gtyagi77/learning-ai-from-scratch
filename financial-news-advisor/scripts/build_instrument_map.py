@@ -9,11 +9,14 @@ app/prices.py reads via INSTRUMENT_MAP_PATH.
 Usage:
     python scripts/build_instrument_map.py --provider upstox
     python scripts/build_instrument_map.py --provider angelone
+    python scripts/build_instrument_map.py --provider breeze
     python scripts/build_instrument_map.py --provider upstox --all
 
 By default only the app's watch universe (Nifty 50 + sector baskets) plus
 any portfolio holdings are included, which keeps the file tiny. --all maps
-every NSE equity the broker lists (~2000 symbols).
+every NSE equity the broker lists (~2000 symbols) -- not supported for
+breeze, which has no anonymous bulk list and needs BREEZE_API_KEY /
+BREEZE_API_SECRET / BREEZE_SESSION_TOKEN set to build even the scoped map.
 """
 
 import argparse
@@ -40,12 +43,30 @@ def wanted_symbols() -> set:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--provider", choices=["upstox", "angelone"], required=True)
+    parser.add_argument("--provider", choices=["upstox", "angelone", "breeze"], required=True)
     parser.add_argument("--out", default=os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "instruments.json"))
     parser.add_argument("--all", action="store_true",
-                        help="map every NSE equity, not just the watch universe")
+                        help="map every NSE equity, not just the watch universe "
+                             "(not supported for breeze)")
     args = parser.parse_args()
+
+    if args.all and args.provider == "breeze":
+        parser.error("--all is not supported for breeze (no anonymous bulk list)")
+
+    if args.provider == "breeze":
+        missing = [v for v in ("BREEZE_API_KEY", "BREEZE_API_SECRET", "BREEZE_SESSION_TOKEN")
+                  if not os.environ.get(v)]
+        if missing:
+            parser.error(f"breeze needs {', '.join(missing)} set in the environment "
+                        f"(session token is regenerated daily -- see README)")
+        # download_map("breeze") is already scoped to the watch universe.
+        mapping = instruments.download_map("breeze")
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump(mapping, fh, indent=1, sort_keys=True)
+        print(f"wrote {len(mapping)} symbols to {args.out}")
+        print(f"now set: QUOTE_PROVIDER=breeze  INSTRUMENT_MAP_PATH={args.out}")
+        return
 
     print(f"downloading {args.provider} instrument list ...")
     full = instruments.download_map(args.provider)

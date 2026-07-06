@@ -19,7 +19,7 @@ can trade the zero-config defaults for higher-quality official data:
 | | env var | options |
 |---|---|---|
 | **Per-holding news** | `TICKER_NEWS_PROVIDER` | `google` (default — Google News RSS by company name, deep Indian coverage, keyless), `yahoo` (per-ticker feed), `none` |
-| **Live quotes** | `QUOTE_PROVIDER` | `yahoo` (default — keyless, NSE/BSE/US in one API, ~15 min delayed), `upstox` (free, real-time NSE/BSE), `angelone` (free, real-time) |
+| **Live quotes** | `QUOTE_PROVIDER` | `yahoo` (default — keyless, NSE/BSE/US in one API, ~15 min delayed), `upstox` (free, real-time NSE/BSE), `angelone` (free, real-time), `breeze` (free, real-time, ICICI Direct) |
 
 Yahoo is the default only because it is the one keyless API spanning
 NSE+BSE+US; it is unofficial and increasingly rate-limited. Any symbol a
@@ -33,9 +33,9 @@ cloud-provider IP ranges outright — this can't always be worked around in
 code. `GET /api/status`'s `yahoo_session_ok` field tells you whether the
 handshake is actually succeeding from wherever the app is hosted; if it
 stays `false` (or prices/horizons/analyst data stay blank) even with the
-crumb handling in place, the reliable fix is switching to `upstox` or
-`angelone` above — both are keyed, official APIs Yahoo's blocking doesn't
-affect.
+crumb handling in place, the reliable fix is switching to `upstox`,
+`angelone`, or `breeze` above — all three are keyed, official APIs
+Yahoo's blocking doesn't affect.
 
 #### Real-time NSE quotes via Upstox (~10 min, free)
 
@@ -62,6 +62,37 @@ affect.
 2 each trading day and update the env var. Angel One works the same way
 (`QUOTE_PROVIDER=angelone`, `ANGELONE_API_KEY` + `ANGELONE_ACCESS_TOKEN`,
 `--provider angelone` for the map script).
+
+#### Real-time NSE/BSE quotes via ICICI Direct Breeze (free)
+
+1. Need an ICICI Direct trading/demat account. Register a free Breeze API
+   app at <https://api.icicidirect.com/apiuser/register.html> and note the
+   **API Key** and **API Secret**.
+2. Get today's session token — the helper walks you through the browser
+   login:
+   ```bash
+   python scripts/get_breeze_token.py
+   ```
+3. Set the environment variables where the app runs:
+   ```
+   QUOTE_PROVIDER=breeze
+   BREEZE_API_KEY=<your API Key>
+   BREEZE_API_SECRET=<your API Secret>
+   BREEZE_SESSION_TOKEN=<from step 2>
+   ```
+   On Render: service → **Environment** tab → add all three → Save
+   (auto-redeploys).
+4. Unlike Upstox/Angel One, Breeze has no anonymous bulk instrument list —
+   build the symbol map explicitly (needs the three env vars above set;
+   scoped to the app's watch universe, not every NSE equity):
+   ```bash
+   python scripts/build_instrument_map.py --provider breeze
+   ```
+   and set `INSTRUMENT_MAP_PATH=instruments.json`.
+
+**Caveat:** the Breeze session token expires by midnight IST, so re-run
+step 2 each trading day and update the env var (and re-run step 4 if you
+add new holdings — existing ones stay cached in `instruments.json`).
 
 > ⚠ **Educational project only.** The recommendations are derived from a
 > hand-rolled sentiment model over public news headlines. They are not
