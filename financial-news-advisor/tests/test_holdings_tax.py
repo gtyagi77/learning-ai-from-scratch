@@ -34,6 +34,17 @@ def test_parse_generic_csv():
     assert len(errors) == 1 and "row 5" in errors[0]
 
 
+def test_resolve_bare_indian_symbol_not_in_curated_map_defaults_to_nse():
+    # GKP is a real NSE small-cap not in INDIA_COMPANY_MAP's curated Nifty
+    # 50 + sector-basket names -- must not be misclassified as a bare US
+    # symbol just because it happens to be short and all-caps.
+    assert holdings._resolve("GKP") == "GKP.NS"
+    # Genuine US holdings (curated in US_COMPANY_MAP) must still pass
+    # through unchanged.
+    assert holdings._resolve("AAPL") == "AAPL"
+    assert holdings._resolve("BRK-B") == "BRK-B"
+
+
 def test_parse_zerodha_holdings():
     body = ("Instrument,Qty.,Avg. cost,LTP,Cur. val,P&L\n"
             "RELIANCE,10,\"1,450.50\",1528.4,15284,779\n"
