@@ -70,8 +70,8 @@ def _resolve(symbol_or_name: str) -> Optional[str]:
         resolved = tickers.resolve_symbol(up)
         if resolved.endswith(".NS") or resolved.endswith(".BO"):
             return resolved
-        if re.match(r"^[A-Z]{1,5}(-[A-Z])?$", resolved):
-            return resolved  # plausible US symbol (AAPL, BRK-B)
+        if resolved in tickers.US_BASES:
+            return resolved  # known US large-cap (AAPL, BRK-B)
         # Bare Indian-looking symbol not in the known map: assume NSE.
         if re.match(r"^[A-Z0-9&\-]{2,20}$", up):
             return up + ".NS"

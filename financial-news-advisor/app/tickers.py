@@ -231,6 +231,11 @@ INDIAN_BASES: Dict[str, str] = {
     if sym.endswith(".NS")
 }
 
+# Known US large-cap symbols, used to tell a genuine US holding (AAPL,
+# BRK-B) apart from an obscure Indian symbol of the same shape that just
+# isn't in INDIAN_BASES yet -- see holdings._resolve().
+US_BASES: Set[str] = set(US_COMPANY_MAP.values())
+
 # Symbols that collide with everyday English words or common all-caps
 # usages; only matched via cashtags ($F) or company names, never as bare
 # uppercase words. Note the bare-word match is case-sensitive, so pure
