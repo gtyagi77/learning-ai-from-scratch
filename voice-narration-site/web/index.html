@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceForge — Self-Hosted Voice Cloning &amp; Narration</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <h1>🎙️ VoiceForge</h1>
+      <p class="tagline">Clone a voice, paste a script, download your narration — 100% local.</p>
+      <div class="engine-badge" id="engine-badge">Checking local engine…</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- STEP 1: Voice sample + clone -->
+    <section class="card" id="step-clone">
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <h2>Create a voice clone</h2>
+      </div>
+
+      <div class="subgrid">
+        <div>
+          <h3>Record a sample</h3>
+          <p class="hint">10–30 seconds of clear speech is enough. Read naturally, avoid background noise.</p>
+          <div class="row">
+            <button id="btn-record" class="btn">● Start recording</button>
+            <span id="record-timer" class="timer">0:00</span>
+          </div>
+          <audio id="record-preview" controls hidden></audio>
+        </div>
+
+        <div>
+          <h3>…or upload audio files</h3>
+          <p class="hint">WAV always works; MP3/M4A/WebM need ffmpeg on the server.</p>
+          <input type="file" id="file-upload" accept="audio/*" multiple />
+          <ul id="file-list" class="file-list"></ul>
+        </div>
+      </div>
+
+      <div class="row">
+        <input type="text" id="voice-name" placeholder="Name this voice (e.g. My narration voice)" />
+      </div>
+
+      <label class="checkbox consent">
+        <input type="checkbox" id="consent" />
+        <span>I confirm this is <strong>my own voice</strong>, or I have the speaker's explicit permission
+        to clone it, and I will use it lawfully.</span>
+      </label>
+
+      <div class="row">
+        <button id="btn-clone" class="btn primary" disabled>Save voice clone</button>
+      </div>
+      <div class="status" id="clone-status"></div>
+
+      <div class="existing-voices">
+        <h3>Saved voices</h3>
+        <div class="row">
+          <select id="voice-select">
+            <option value="">Loading…</option>
+          </select>
+          <button id="btn-refresh-voices" class="btn small-btn" title="Refresh">↻</button>
+          <button id="btn-delete-voice" class="btn small-btn" title="Delete selected voice" disabled>🗑</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2: Script → narration -->
+    <section class="card" id="step-script">
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <h2>Write your script &amp; generate narration</h2>
+      </div>
+
+      <textarea id="script" rows="10"
+        placeholder="Paste or write your narration script here…&#10;&#10;Long scripts are automatically split into sentences and stitched into a single audio file."></textarea>
+      <div class="meta-row">
+        <span id="char-count">0 characters</span>
+        <span id="chunk-count"></span>
+      </div>
+
+      <details class="settings">
+        <summary>Voice settings</summary>
+        <div class="sliders">
+          <label>
+            Expressiveness <span id="exaggeration-val">0.50</span>
+            <input type="range" id="exaggeration" min="0" max="1" step="0.05" value="0.5" />
+            <small>Higher = more emotional emphasis</small>
+          </label>
+          <label>
+            Pacing / fidelity <span id="cfg-val">0.50</span>
+            <input type="range" id="cfg" min="0" max="1" step="0.05" value="0.5" />
+            <small>Lower = faster, more improvised; higher = closer to the sample</small>
+          </label>
+        </div>
+      </details>
+
+      <div class="row generate-row">
+        <button id="btn-generate" class="btn primary big" disabled>🎧 Generate narration</button>
+        <button id="btn-preview" class="btn">▶ Quick preview (browser voice, no cloning)</button>
+      </div>
+      <div class="progress" id="progress" hidden>
+        <div class="progress-bar indeterminate" id="progress-bar"></div>
+      </div>
+      <div class="status" id="generate-status"></div>
+
+      <div class="result" id="result" hidden>
+        <h3>Your narration</h3>
+        <audio id="result-audio" controls></audio>
+        <a id="btn-download" class="btn primary" download>⬇ Download audio</a>
+      </div>
+    </section>
+
+    <footer class="site-footer">
+      <p>
+        Runs entirely on your own machine via a local <strong>Chatterbox TTS</strong> server — no third-party
+        API, no audio ever leaves this computer. Only clone voices you own or have explicit permission to use;
+        impersonating someone without consent may be illegal in your jurisdiction.
+      </p>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

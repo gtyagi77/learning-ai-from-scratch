@@ -1,0 +1,9 @@
+# VoiceForge local backend
+fastapi>=0.111
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+anyio>=4.0
+
+# Open-source voice cloning engine (MIT-licensed, runs locally).
+# Pulls in torch/torchaudio; first model load downloads weights from Hugging Face.
+chatterbox-tts>=0.1.1

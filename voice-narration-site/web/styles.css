@@ -33,6 +33,29 @@ body {
 .site-header h1 { margin: 0; font-size: 2rem; }
 .tagline { color: var(--muted); margin: 0.35rem 0 0; }
 
+.engine-badge {
+  display: inline-block;
+  margin-top: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid var(--card-edge);
+  background: #0f1219;
+  color: var(--muted);
+}
+.engine-badge.ok { color: var(--ok); border-color: rgba(62, 207, 142, 0.4); }
+.engine-badge.idle { color: var(--warn); border-color: rgba(240, 180, 41, 0.4); }
+.engine-badge.err { color: var(--err); border-color: rgba(255, 107, 107, 0.4); }
+
+.progress-bar.indeterminate {
+  width: 40% !important;
+  animation: slide 1.3s ease-in-out infinite;
+}
+@keyframes slide {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--card-edge);
