@@ -12,6 +12,7 @@ regresses below the pre-crumb "unauthenticated, best-effort" state.
 
 import logging
 import threading
+import time
 from typing import Dict, Optional
 
 import requests
@@ -27,6 +28,12 @@ _lock = threading.Lock()
 _session: Optional[requests.Session] = None
 _crumb: Optional[str] = None
 _handshake_ok = False
+_last_attempt: float = 0.0
+# Re-attempt a failed handshake at most this often -- without this, a
+# one-time hiccup at process startup (e.g. network not up yet) would leave
+# _handshake_ok False for the rest of the process's life, since otherwise
+# the only other retry path is reactive (a 401/403 on an actual request).
+_RETRY_COOLDOWN_SECONDS = 120
 
 
 def _handshake() -> None:
@@ -52,10 +59,13 @@ def _handshake() -> None:
 
 
 def _ensure_session() -> None:
-    if _session is None:
-        with _lock:
-            if _session is None:
-                _handshake()
+    global _last_attempt
+    with _lock:
+        stale_failure = (_session is not None and not _handshake_ok
+                         and time.time() - _last_attempt > _RETRY_COOLDOWN_SECONDS)
+        if _session is None or stale_failure:
+            _handshake()
+            _last_attempt = time.time()
 
 
 def session_ok() -> bool:

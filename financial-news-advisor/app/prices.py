@@ -42,13 +42,22 @@ _lock = threading.Lock()
 # --------------------------------------------------------------------------
 
 def get_quote(symbol: str) -> Optional[Quote]:
-    """Return {price, previous_close, currency, change_pct} or None, cached."""
+    """Return {price, previous_close, currency, change_pct} or None, cached.
+
+    Successes and failures use different TTLs: a good quote is trusted for
+    a while (this is a glance-once-a-day tool, not a real-time ticker), but
+    a miss (e.g. Yahoo transiently blocking a request) retries much sooner
+    instead of leaving a card blank for as long as a real quote would be
+    cached."""
     symbol = symbol.upper()
     now = time.time()
     with _lock:
         cached = _cache.get(symbol)
-        if cached and now - cached[0] < config.PRICE_CACHE_TTL_SECONDS:
-            return cached[1]
+        if cached:
+            ttl = (config.PRICE_CACHE_TTL_SECONDS if cached[1] is not None
+                   else config.PRICE_CACHE_FAILURE_TTL_SECONDS)
+            if now - cached[0] < ttl:
+                return cached[1]
 
     quote = _dispatch(symbol)
     with _lock:

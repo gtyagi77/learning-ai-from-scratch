@@ -15,8 +15,19 @@ RECENCY_HALF_LIFE_HOURS = float(os.environ.get("RECENCY_HALF_LIFE_HOURS", "12"))
 # news signal, used when deriving a target price from the sentiment score.
 MAX_IMPLIED_MOVE = float(os.environ.get("MAX_IMPLIED_MOVE", "0.10"))
 
-# Quote cache TTL (seconds).
-PRICE_CACHE_TTL_SECONDS = int(os.environ.get("PRICE_CACHE_TTL_SECONDS", "300"))
+# Quote cache TTL (seconds). Successes are cached much longer than failures
+# -- this is a glance-once-a-day tool, not a real-time ticker, so there's no
+# need to re-fetch a good quote often; but a transient miss (e.g. Yahoo
+# briefly blocking a request) should retry soon rather than staying blank
+# for as long as a successful quote would be trusted.
+PRICE_CACHE_TTL_SECONDS = int(os.environ.get("PRICE_CACHE_TTL_SECONDS", "1800"))
+PRICE_CACHE_FAILURE_TTL_SECONDS = int(os.environ.get("PRICE_CACHE_FAILURE_TTL_SECONDS", "120"))
+
+# How often the background job recomputes and caches each user's
+# recommendations (seconds) -- see recommender.py's warm cache. Long enough
+# to respect screener.in's pacing lock and avoid pointless recompute, short
+# enough that a morning digest and a midday check both see fresh-ish data.
+RECS_REFRESH_INTERVAL_SECONDS = int(os.environ.get("RECS_REFRESH_INTERVAL_SECONDS", "900"))
 
 DB_PATH = os.environ.get(
     "DB_PATH",
@@ -118,6 +129,24 @@ ANGELONE_ACCESS_TOKEN = os.environ.get("ANGELONE_ACCESS_TOKEN", "")
 BREEZE_API_KEY = os.environ.get("BREEZE_API_KEY", "")
 BREEZE_API_SECRET = os.environ.get("BREEZE_API_SECRET", "")
 BREEZE_SESSION_TOKEN = os.environ.get("BREEZE_SESSION_TOKEN", "")
+
+# ---- proactive daily digest (optional) ----
+# Both channels fire independently when configured -- see app/notify.py.
+# Local hour (24h, IST) the digest is sent; the sending thread sleeps until
+# the next occurrence of this hour rather than running on a fixed interval,
+# so it lands at a predictable time each morning instead of drifting with
+# process start time.
+DIGEST_HOUR_IST = int(os.environ.get("DIGEST_HOUR_IST", "8"))
+# Telegram: direct push via a bot. Create a bot with @BotFather, message it
+# once, then use https://api.telegram.org/bot<token>/getUpdates to find your
+# chat_id.
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+# Hermes Agent (github.com/NousResearch/hermes-agent): relays a plain
+# message to your configured home channel via a deliver_only webhook route
+# you set up on your own Hermes instance -- see README for the route config.
+HERMES_WEBHOOK_URL = os.environ.get("HERMES_WEBHOOK_URL", "")
+HERMES_WEBHOOK_SECRET = os.environ.get("HERMES_WEBHOOK_SECRET", "")
 
 # Tickers seeded into the portfolio on first run so the dashboard has
 # something to show; the user can remove them freely. All-Indian defaults —

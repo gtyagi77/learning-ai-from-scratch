@@ -19,9 +19,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, field_validator
 
-from . import (auth, config, crawler, database, financials, fundamentals,
-               holdings, macro, prices, recommender, taxes, tickers, universe,
-               yahoo_session)
+from . import (auth, config, crawler, database, digest, financials,
+               fundamentals, holdings, macro, prices, recommender, taxes,
+               tickers, universe, yahoo_session)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -38,8 +38,12 @@ MAX_UPLOAD_BYTES = 1_000_000
 async def lifespan(_: FastAPI):
     database.init()
     crawler.start()
+    recommender.start_cache_refresh()
+    digest.start(config.DIGEST_HOUR_IST)
     yield
     crawler.stop()
+    recommender.stop_cache_refresh()
+    digest.stop()
 
 
 app = FastAPI(title="Financial News Portfolio Advisor", lifespan=lifespan)
@@ -428,7 +432,9 @@ def _positions_for(user_id: int) -> Dict[str, Dict]:
 def recommendations(profile: Optional[str] = None,
                     user: Dict = Depends(get_current_user)):
     prof = _profile_for(user, profile)
-    recs = recommender.recommend_portfolio_for_user(user["id"], prof)
+    cached = recommender.cached_recommendations(user["id"], prof)
+    recs = [dict(r) for r in cached] if cached is not None else \
+        recommender.recommend_portfolio_for_user(user["id"], prof)
     positions = _positions_for(user["id"])
     for rec in recs:
         pos = positions.get(rec["ticker"])
@@ -452,6 +458,9 @@ def recommendations(profile: Optional[str] = None,
         ),
         "risk_profile": prof,
         "recommendations": recs,
+        # None means this response was computed live (no warm cache hit yet
+        # for this user/profile) rather than served from the background refresh.
+        "cache_age_s": recommender.cache_age_seconds(user["id"]) if cached is not None else None,
     }
 
 
