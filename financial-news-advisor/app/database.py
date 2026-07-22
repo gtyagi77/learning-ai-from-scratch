@@ -90,6 +90,13 @@ def init(db_path: Optional[str] = None) -> None:
                 PRIMARY KEY (user_id, sector, ticker)
             );
             CREATE INDEX IF NOT EXISTS idx_sector_members_user ON sector_members(user_id);
+            CREATE TABLE IF NOT EXISTS digest_state (
+                user_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                last_action TEXT NOT NULL,
+                sent_ts REAL NOT NULL,
+                PRIMARY KEY (user_id, ticker)
+            );
             """
         )
         # Migrations for databases created before these columns existed.
@@ -244,6 +251,12 @@ def remove_holding(ticker: str, user_id: int = 0) -> bool:
 def count_users() -> int:
     with _lock:
         return _conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def list_users() -> List[Dict]:
+    with _lock:
+        rows = _conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
 
 
 def create_user(email: str, username: Optional[str], password_hash: Optional[str],
@@ -481,4 +494,38 @@ def prune_articles(max_age_days: float = 14.0) -> None:
             "DELETE FROM articles WHERE COALESCE(published_ts, fetched_ts) < ?",
             (cutoff,),
         )
+
+
+# ---------------------------------------------------------------------------
+# digest state (last action sent per user/ticker, for the daily digest)
+# ---------------------------------------------------------------------------
+
+def get_digest_state(user_id: int) -> Dict[str, str]:
+    """{ticker: last_action} as of the previous digest sent to this user."""
+    with _lock:
+        rows = _conn.execute(
+            "SELECT ticker, last_action FROM digest_state WHERE user_id = ?",
+            (user_id,)).fetchall()
+    return {r["ticker"]: r["last_action"] for r in rows}
+
+
+def get_last_digest_ts(user_id: int) -> Optional[float]:
+    with _lock:
+        row = _conn.execute(
+            "SELECT MAX(sent_ts) AS ts FROM digest_state WHERE user_id = ?",
+            (user_id,)).fetchone()
+    return row["ts"] if row and row["ts"] is not None else None
+
+
+def set_digest_state(user_id: int, actions: Dict[str, str]) -> None:
+    now = time.time()
+    with _lock:
+        for ticker, action in actions.items():
+            _conn.execute(
+                """INSERT INTO digest_state (user_id, ticker, last_action, sent_ts)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(user_id, ticker) DO UPDATE SET
+                     last_action = excluded.last_action, sent_ts = excluded.sent_ts""",
+                (user_id, ticker.upper(), action, now))
+        _conn.commit()
         _conn.commit()

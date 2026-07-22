@@ -28,14 +28,21 @@ the app always keeps working.
 
 **Known limitation:** Yahoo's endpoints require a crumb/cookie handshake
 for non-browser clients (`app/yahoo_session.py` does this once per
-process) and are known to block or challenge requests from some
+process, and now retries periodically if the initial handshake failed —
+see below) and are known to block or challenge requests from some
 cloud-provider IP ranges outright — this can't always be worked around in
 code. `GET /api/status`'s `yahoo_session_ok` field tells you whether the
-handshake is actually succeeding from wherever the app is hosted; if it
-stays `false` (or prices/horizons/analyst data stay blank) even with the
-crumb handling in place, the reliable fix is switching to `upstox`,
-`angelone`, or `breeze` above — all three are keyed, official APIs
-Yahoo's blocking doesn't affect.
+handshake is actually succeeding from wherever the app is hosted.
+
+**Recommended default for a daily/glance-once-a-day setup:** stick with
+`yahoo` and let the resilience below carry it — quotes are cached for
+30 minutes on success (`PRICE_CACHE_TTL_SECONDS`) but retried after just
+2 minutes on failure (`PRICE_CACHE_FAILURE_TTL_SECONDS`), and a
+one-time startup hiccup in the crumb handshake no longer sticks for the
+process's whole lifetime. The `upstox`/`angelone`/`breeze` options below
+are worth the daily token-refresh chore only if you specifically want
+true real-time (sub-minute) prices, e.g. for intraday decisions — for
+everything else they're more maintenance than the delay is worth.
 
 #### Real-time NSE quotes via Upstox (~10 min, free)
 
@@ -93,6 +100,64 @@ Yahoo's blocking doesn't affect.
 **Caveat:** the Breeze session token expires by midnight IST, so re-run
 step 2 each trading day and update the env var (and re-run step 4 if you
 add new holdings — existing ones stay cached in `instruments.json`).
+
+### Proactive daily digest (optional)
+
+By default you have to remember to open the dashboard. Set either (or
+both) of these and the app instead pushes a message once a day
+(`DIGEST_HOUR_IST`, default 8 AM) summarizing any rating changes on your
+holdings plus fresh headlines since the last digest — nothing is sent on
+a quiet day with no changes and no news.
+
+**Telegram** — a direct bot message:
+1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`),
+   note the token it gives you.
+2. Message your new bot once (anything), then visit
+   `https://api.telegram.org/bot<token>/getUpdates` in a browser to find
+   your numeric `chat.id`.
+3. Set:
+   ```
+   TELEGRAM_BOT_TOKEN=<from step 1>
+   TELEGRAM_CHAT_ID=<from step 2>
+   ```
+
+**Hermes Agent** ([github.com/NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent))
+— relays a plain message to your existing home channel (WhatsApp,
+Telegram, etc.) if you already run Hermes. Add a `deliver_only` webhook
+route to your own Hermes `config.yaml`:
+```yaml
+platforms:
+  webhook:
+    enabled: true
+    extra:
+      port: 8644
+      routes:
+        portfolio-digest:
+          secret: "<pick a shared secret>"
+          deliver: "telegram"   # or whatever your home channel platform is
+          deliver_only: true
+          prompt: "{match.text}"
+```
+(or the CLI equivalent: `hermes webhook subscribe portfolio-digest
+--deliver telegram --deliver-only --prompt "{match.text}"`). Then set,
+on this app's side:
+```
+HERMES_WEBHOOK_URL=http://<hermes-host>:8644/webhooks/portfolio-digest
+HERMES_WEBHOOK_SECRET=<the same shared secret>
+```
+
+Both channels fire independently if configured — one failing doesn't
+block the other.
+
+### Warm recommendation cache
+
+A background thread recomputes every user's recommendations every
+`RECS_REFRESH_INTERVAL_SECONDS` (default 15 min) so opening Deep Analysis
+reads an already-warm result instead of waiting on live compute — this is
+what previously made a large portfolio take a minute or more to load.
+`GET /api/recommendations`'s `cache_age_s` field is `null` when a
+response had to be computed live (e.g. right after a fresh install,
+before the first background cycle has run).
 
 > ⚠ **Educational project only.** The recommendations are derived from a
 > hand-rolled sentiment model over public news headlines. They are not

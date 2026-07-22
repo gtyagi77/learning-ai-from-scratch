@@ -26,6 +26,8 @@ mean-reversion, 12m analyst/growth) and a plain-language strategy block
 Educational tooling only — not investment advice.
 """
 
+import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
@@ -33,6 +35,8 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import (config, database, financials, fundamentals, macro, prices,
                sentiment, universe)
+
+log = logging.getLogger("recommender")
 
 # recommend_for_ticker is I/O-bound (screener/Yahoo/macro fetches per
 # symbol) — a modest thread pool lets those network waits overlap instead
@@ -541,6 +545,80 @@ def recommend_portfolio(risk_profile: str = "balanced") -> List[Dict]:
 def recommend_portfolio_for_user(user_id: int,
                                  risk_profile: str = "balanced") -> List[Dict]:
     return _recommend_holdings_concurrently(database.get_portfolio(user_id), risk_profile)
+
+
+# --------------------------------------------------------------------------
+# warm recommendation cache -- recommend_for_ticker fans out to screener.in/
+# Yahoo/macro per symbol, which for a large portfolio can take a minute-plus
+# (screener.in's own pacing lock rate-limits it regardless of thread count).
+# A background thread (started alongside the crawler, see main.py) refills
+# this cache on RECS_REFRESH_INTERVAL_SECONDS so /api/recommendations reads
+# an already-warm result instead of making the request wait on live compute.
+# --------------------------------------------------------------------------
+
+_rec_cache: Dict[int, Tuple[float, str, List[Dict]]] = {}  # user_id -> (computed_at, profile, recs)
+_rec_cache_lock = threading.Lock()
+
+
+def cached_recommendations(user_id: int, risk_profile: str) -> Optional[List[Dict]]:
+    """A still-fresh cached result for this exact user+profile, or None."""
+    with _rec_cache_lock:
+        entry = _rec_cache.get(user_id)
+    if not entry:
+        return None
+    computed_at, cached_profile, recs = entry
+    if cached_profile != risk_profile:
+        return None  # e.g. a one-off ?profile= override -> caller computes live
+    if time.time() - computed_at > config.RECS_REFRESH_INTERVAL_SECONDS * 2:
+        return None
+    return recs
+
+
+def cache_age_seconds(user_id: int) -> Optional[float]:
+    with _rec_cache_lock:
+        entry = _rec_cache.get(user_id)
+    return (time.time() - entry[0]) if entry else None
+
+
+def refresh_user_cache(user_id: int, risk_profile: str) -> List[Dict]:
+    """Recompute and cache one user's recommendations."""
+    recs = recommend_portfolio_for_user(user_id, risk_profile)
+    with _rec_cache_lock:
+        _rec_cache[user_id] = (time.time(), risk_profile, recs)
+    return recs
+
+
+def refresh_all_users_cache() -> None:
+    """Recompute and cache recommendations for every user with a non-empty
+    portfolio. Called periodically by the background thread below."""
+    for user in database.list_users():
+        if not database.get_portfolio(user["id"]):
+            continue
+        try:
+            refresh_user_cache(user["id"], user.get("risk_profile") or "balanced")
+        except Exception:
+            log.exception("recs cache refresh failed for user %s", user["id"])
+
+
+_cache_stop = threading.Event()
+
+
+def _cache_refresh_loop() -> None:
+    while not _cache_stop.is_set():
+        try:
+            refresh_all_users_cache()
+        except Exception:
+            log.exception("recs cache refresh cycle crashed")
+        _cache_stop.wait(config.RECS_REFRESH_INTERVAL_SECONDS)
+
+
+def start_cache_refresh() -> None:
+    thread = threading.Thread(target=_cache_refresh_loop, name="recs-cache", daemon=True)
+    thread.start()
+
+
+def stop_cache_refresh() -> None:
+    _cache_stop.set()
 
 
 def scan_universe(max_per_sector: int = 10, risk_profile: str = "balanced",
